@@ -29,7 +29,12 @@ class CompleteLapRecorder {
     final candidate = _candidate;
     if (candidate == null) {
       _lastPacketId = data.packetId;
-      if (_isCleanLapStart(data)) {
+      // Create a candidate whenever we see a positive lap number,
+      // even if currentLapTime is null or already > 2s. Without this
+      // the first lap is permanently lost when auto-start triggers
+      // mid-lap, and auto-stop (which depends on completed laps)
+      // never fires.
+      if (data.currentLap > 0) {
         _startCandidate(data);
       }
       return;

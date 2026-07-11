@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../config/theme/app_colors.dart';
 import '../../../config/theme/app_typography.dart';
+import '../../../core/storage/session_repository.dart';
+import '../../../shared/format_utils.dart';
 import '../../../shared/widgets/panel_card.dart';
 import '../domain/session_summary.dart';
 import '../providers/engineer_session_providers.dart';
@@ -82,18 +84,73 @@ class _SessionListTile extends ConsumerWidget {
 
   const _SessionListTile({required this.session});
 
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: AppColors.graphite,
+          title: Text(
+            'Eliminar sesión',
+            style: AppTypography.orbitron(
+              size: 16,
+              weight: FontWeight.w700,
+              letterSpacing: 1.2,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          content: Text(
+            '¿Estás seguro de eliminar la sesión del ${formatDateTime(session.startTime)}?',
+            style: AppTypography.inter(
+              size: 14,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(
+                'Cancelar',
+                style: AppTypography.inter(
+                  size: 14,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(
+                'Eliminar',
+                style: AppTypography.inter(
+                  size: 14,
+                  color: AppColors.error,
+                  weight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    final SessionRepository repository = ref.read(sessionRepositoryProvider);
+    await repository.deleteSession(session.sessionId);
+    ref.invalidate(engineerSessionsProvider);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return PanelCard(
       padding: const EdgeInsets.all(14),
       child: InkWell(
-        onTap: () {
-          ref.read(selectedEngineerSessionIdProvider.notifier).state =
-              session.sessionId;
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) =>
-                  EngineerSessionDetailScreen(sessionId: session.sessionId),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) =>
+                    EngineerSessionDetailScreen(sessionId: session.sessionId),
             ),
           );
         },
@@ -104,7 +161,7 @@ class _SessionListTile extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    _formatDateTime(session.startTime),
+                    formatDateTime(session.startTime),
                     style: AppTypography.orbitron(
                       size: 16,
                       weight: FontWeight.w600,
@@ -113,7 +170,7 @@ class _SessionListTile extends ConsumerWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'GT7 local · ${session.validLapCount} vueltas válidas',
+                    '${session.trackName ?? 'Pista desconocida'} · ${session.validLapCount} vueltas válidas',
                     style: AppTypography.inter(
                       size: 12,
                       color: AppColors.textPrimary,
@@ -127,11 +184,12 @@ class _SessionListTile extends ConsumerWidget {
                     children: <Widget>[
                       _SessionChip(
                         label: 'Best',
-                        value: _formatDuration(session.bestLap),
+                        value: formatDuration(session.bestLap),
                       ),
+
                       _SessionChip(
                         label: 'Duration',
-                        value: _formatDuration(session.sessionDuration),
+                        value: formatDuration(session.sessionDuration),
                       ),
                       _SessionChip(label: 'Source', value: session.game),
                     ],
@@ -140,10 +198,28 @@ class _SessionListTile extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: 12),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.neonCyan,
-              size: 28,
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: AppColors.textSecondary,
+                      size: 20,
+                    ),
+                    onPressed: () => _confirmDelete(context, ref),
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.neonCyan,
+                  size: 22,
+                ),
+              ],
             ),
           ],
         ),
@@ -253,25 +329,4 @@ class _SessionChip extends StatelessWidget {
       ),
     );
   }
-}
-
-String _formatDateTime(DateTime value) {
-  final String day = value.day.toString().padLeft(2, '0');
-  final String month = value.month.toString().padLeft(2, '0');
-  final String year = value.year.toString();
-  final String hour = value.hour.toString().padLeft(2, '0');
-  final String minute = value.minute.toString().padLeft(2, '0');
-  return '$day/$month/$year · $hour:$minute';
-}
-
-String _formatDuration(Duration? value) {
-  if (value == null) {
-    return 'N/D';
-  }
-
-  final int totalMilliseconds = value.inMilliseconds.abs();
-  final int minutes = totalMilliseconds ~/ 60000;
-  final int seconds = (totalMilliseconds % 60000) ~/ 1000;
-  final int milliseconds = totalMilliseconds % 1000;
-  return '$minutes:${seconds.toString().padLeft(2, '0')}.${milliseconds.toString().padLeft(3, '0')}';
 }

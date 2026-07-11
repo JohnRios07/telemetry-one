@@ -52,23 +52,7 @@ class SessionRepository {
 
   bool isEngineerSession(Session session) {
     return session.game.toUpperCase() == 'GT7' &&
-        validCompleteLapsFor(session).isNotEmpty;
-  }
-
-  List<CompleteLap> validCompleteLapsFor(Session session) {
-    return session.laps
-        .where((CompleteLap lap) {
-          if (lap.officialLapTime <= Duration.zero) {
-            return false;
-          }
-
-          if (lap.isOutLap == true || lap.isPitLap == true) {
-            return false;
-          }
-
-          return true;
-        })
-        .toList(growable: false);
+        session.laps.any((lap) => lap.isValidForEngineer);
   }
 
   /// Delete a session by ID.
@@ -87,6 +71,7 @@ class SessionRepository {
             : null,
         game: map['game'] as String? ?? 'GT7',
         ps5Ip: map['ps5_ip'] as String?,
+        trackName: map['track_name'] as String?,
         points:
             (map['points'] as List?)
                 ?.map((p) => _parsePoint(p as Map<String, dynamic>))

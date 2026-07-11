@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../config/theme/app_colors.dart';
 import '../../../config/theme/app_typography.dart';
+import '../../../shared/format_utils.dart';
 import '../../../shared/widgets/panel_card.dart';
 import '../domain/lap_comparison.dart';
 import '../domain/session_summary.dart';
@@ -91,7 +92,7 @@ class _SessionHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            _formatDateTime(summary.startTime),
+            formatDateTime(summary.startTime),
             style: AppTypography.orbitron(
               size: 18,
               weight: FontWeight.w700,
@@ -123,13 +124,13 @@ class _SummaryCards extends StatelessWidget {
     final List<Widget> cards = <Widget>[
       _MetricCard(
         title: 'Best lap',
-        value: _formatDuration(summary.bestLap.value),
+        value: formatDuration(summary.bestLap.value),
         detail: _metricDetail(summary.bestLap),
         unavailable: !summary.bestLap.isAvailable,
       ),
       _MetricCard(
         title: 'Avg lap',
-        value: _formatDuration(summary.averageLap.value),
+        value: formatDuration(summary.averageLap.value),
         detail: _metricDetail(summary.averageLap),
         unavailable: !summary.averageLap.isAvailable,
       ),
@@ -275,7 +276,7 @@ class _ComparisonSection extends StatelessWidget {
                   children: <Widget>[
                     _ComparisonChip(
                       label: 'Lap delta',
-                      value: _formatSignedDuration(summary.lapTimeDelta),
+                      value: formatSignedDuration(summary.lapTimeDelta),
                     ),
                     _ComparisonChip(
                       label: 'Last vs Best speed',
@@ -422,7 +423,7 @@ class _ProgressDeltaCard extends StatelessWidget {
             ),
           ),
           Text(
-            'Δ time ${_formatSignedDuration(point.timeDelta)}',
+            'Δ time ${formatSignedDuration(point.timeDelta)}',
             style: AppTypography.inter(
               size: 11,
               color: AppColors.textSecondary,
@@ -600,7 +601,7 @@ class _LapRow extends StatelessWidget {
           Expanded(
             flex: 25,
             child: Text(
-              _formatDuration(row.lapTime),
+              formatDuration(row.lapTime),
               style: AppTypography.orbitron(
                 size: 14,
                 weight: FontWeight.w600,
@@ -766,34 +767,4 @@ List<LapComparisonPoint> _selectHighlightPoints(
   }
 
   return highlights;
-}
-
-String _formatDateTime(DateTime value) {
-  final String day = value.day.toString().padLeft(2, '0');
-  final String month = value.month.toString().padLeft(2, '0');
-  final String year = value.year.toString();
-  final String hour = value.hour.toString().padLeft(2, '0');
-  final String minute = value.minute.toString().padLeft(2, '0');
-  return '$day/$month/$year · $hour:$minute';
-}
-
-String _formatDuration(Duration? value) {
-  if (value == null) {
-    return 'N/D';
-  }
-
-  final int totalMilliseconds = value.inMilliseconds.abs();
-  final int minutes = totalMilliseconds ~/ 60000;
-  final int seconds = (totalMilliseconds % 60000) ~/ 1000;
-  final int milliseconds = totalMilliseconds % 1000;
-  return '$minutes:${seconds.toString().padLeft(2, '0')}.${milliseconds.toString().padLeft(3, '0')}';
-}
-
-String _formatSignedDuration(Duration value) {
-  final String sign = value.inMilliseconds > 0
-      ? '+'
-      : value.inMilliseconds < 0
-      ? '-'
-      : '±';
-  return '$sign${_formatDuration(value.abs())}';
 }

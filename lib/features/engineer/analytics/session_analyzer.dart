@@ -7,7 +7,9 @@ class SessionAnalyzer {
   const SessionAnalyzer._();
 
   static List<CompleteLap> validLaps(Session session) {
-    return session.laps.where(_isValidLap).toList(growable: false);
+    return session.laps.where((lap) => lap.isValidForEngineer).toList(
+      growable: false,
+    );
   }
 
   static EngineerSessionListItem buildListItem(Session session) {
@@ -23,6 +25,7 @@ class SessionAnalyzer {
       startTime: session.startTime,
       endTime: session.endTime,
       game: session.game,
+      trackName: session.trackName,
       validLapCount: laps.length,
       bestLap: bestLap,
       sessionDuration: session.duration,
@@ -100,13 +103,11 @@ class SessionAnalyzer {
   }
 
   static double? fuelUsedForLap(CompleteLap lap) {
-    final double? startFuel = lap.points.firstWhereOrNull((
-      TelemetryPoint point,
-    ) {
-      return point.fuelCurrentL != null;
+    final double? startFuel = lap.points.firstWhereOrNull((TelemetryPoint p) {
+      return p.fuelCurrentL != null;
     })?.fuelCurrentL;
-    final double? endFuel = lap.points.lastWhereOrNull((TelemetryPoint point) {
-      return point.fuelCurrentL != null;
+    final double? endFuel = lap.points.lastWhereOrNull((TelemetryPoint p) {
+      return p.fuelCurrentL != null;
     })?.fuelCurrentL;
 
     if (startFuel == null || endFuel == null) {
@@ -142,23 +143,21 @@ class SessionAnalyzer {
       return 0;
     }
 
+    // Thresholds for detecting simultaneous throttle and brake input.
+    // 15% is a conservative lower bound that avoids near-zero noise
+    // while still catching real combined inputs during trail-braking
+    // and clumsy pedal work.
+    const double activeThreshold = 0.15;
+
     final int overlapCount = lap.points.where((TelemetryPoint point) {
-      return point.throttle >= 0.15 && point.brake >= 0.15;
+      return point.throttle >= activeThreshold && point.brake >= activeThreshold;
     }).length;
 
     return overlapCount / lap.points.length;
   }
 
-  static bool _isValidLap(CompleteLap lap) {
-    if (lap.officialLapTime <= Duration.zero) {
-      return false;
-    }
-
-    if (lap.isOutLap == true || lap.isPitLap == true) {
-      return false;
-    }
-
-    return true;
+  static Duration _minDuration(Duration current, Duration next) {
+    return current <= next ? current : next;
   }
 
   static List<LapSummaryRow> _buildLapRows(
@@ -216,31 +215,23 @@ class SessionAnalyzer {
     final double score = (1 - normalizedSpread).clamp(0.0, 1.0) * 100;
     return score;
   }
-
-  static Duration _minDuration(Duration current, Duration next) {
-    return current <= next ? current : next;
-  }
 }
 
 extension _FirstWhereOrNullExtension<T> on List<T> {
-  T? firstWhereOrNull(bool Function(T value) test) {
+  /// The first element satisfying [test], or `null` if none.
+  T? firstWhereOrNull(bool Function(T) test) {
     for (final T value in this) {
-      if (test(value)) {
-        return value;
-      }
+      if (test(value)) return value;
     }
-
     return null;
   }
 
-  T? lastWhereOrNull(bool Function(T value) test) {
-    for (int index = length - 1; index >= 0; index -= 1) {
-      final T value = this[index];
-      if (test(value)) {
-        return value;
-      }
+  /// The last element satisfying [test], or `null` if none.
+  T? lastWhereOrNull(bool Function(T) test) {
+    for (int i = length - 1; i >= 0; i--) {
+      final T value = this[i];
+      if (test(value)) return value;
     }
-
     return null;
   }
 }

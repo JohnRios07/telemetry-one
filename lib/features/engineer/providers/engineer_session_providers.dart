@@ -12,10 +12,6 @@ final sessionRepositoryProvider = Provider<SessionRepository>((ref) {
   return SessionRepository();
 });
 
-final selectedEngineerSessionIdProvider = StateProvider<String?>((ref) {
-  return null;
-});
-
 final engineerSessionsProvider = FutureProvider<List<EngineerSessionListItem>>((
   ref,
 ) async {

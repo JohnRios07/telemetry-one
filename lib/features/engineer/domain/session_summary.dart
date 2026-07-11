@@ -45,6 +45,7 @@ class EngineerSessionListItem {
   final DateTime startTime;
   final DateTime? endTime;
   final String game;
+  final String? trackName;
   final int validLapCount;
   final Duration? bestLap;
   final Duration? sessionDuration;
@@ -54,6 +55,7 @@ class EngineerSessionListItem {
     required this.startTime,
     required this.endTime,
     required this.game,
+    this.trackName,
     required this.validLapCount,
     required this.bestLap,
     required this.sessionDuration,
