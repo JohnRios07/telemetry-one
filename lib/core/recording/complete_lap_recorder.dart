@@ -88,7 +88,7 @@ class CompleteLapRecorder {
     if (data.currentLap == candidate.lapNumber &&
         previousLapTime != null &&
         currentLapTime != null &&
-        previousLapTime - currentLapTime > _strongLapTimeRewindThreshold) {
+        previousLapTime - currentLapTime >= _strongLapTimeRewindThreshold) {
       return true;
     }
 
@@ -100,11 +100,13 @@ class CompleteLapRecorder {
   }
 
   void _completeCandidate(_CandidateLap candidate, TelemetryData data) {
-    final officialLapTime = data.lastLapTime;
-    if (candidate.lapNumber == 0 || officialLapTime == null) {
+    if (candidate.lapNumber == 0) {
       _candidate = null;
       return;
     }
+
+    final officialLapTime =
+        data.lastLapTime ?? data.timestamp.difference(candidate.startTime);
 
     _completedLaps.add(
       CompleteLap(

@@ -155,6 +155,44 @@ void main() {
 
       expect(recorder.completedLaps, isEmpty);
     });
+
+    test('uses elapsed time fallback when lastLapTime is null', () {
+      final recorder = CompleteLapRecorder();
+      final start = DateTime(2026);
+
+      recorder
+        ..ingest(
+          _data(
+            timestamp: start,
+            packetId: 1,
+            currentLap: 1,
+            currentLapTime: const Duration(milliseconds: 500),
+          ),
+        )
+        ..ingest(
+          _data(
+            timestamp: start.add(const Duration(seconds: 12)),
+            packetId: 2,
+            currentLap: 1,
+            currentLapTime: const Duration(seconds: 12),
+          ),
+        )
+        ..ingest(
+          _data(
+            timestamp: start.add(const Duration(seconds: 90)),
+            packetId: 3,
+            currentLap: 2,
+            currentLapTime: const Duration(milliseconds: 200),
+            lastLapTime: null,
+          ),
+        );
+
+      expect(recorder.completedLaps, hasLength(1));
+      expect(
+        recorder.completedLaps.single.officialLapTime,
+        const Duration(seconds: 90),
+      );
+    });
   });
 }
 
