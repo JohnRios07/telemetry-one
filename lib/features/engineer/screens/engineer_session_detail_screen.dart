@@ -207,8 +207,8 @@ class _MetricCard extends StatelessWidget {
             title.toUpperCase(),
             style: AppTypography.inter(
               size: 10,
-              color: AppColors.textSecondary,
-              weight: FontWeight.w600,
+              color: AppColors.textPrimary,
+              weight: FontWeight.w700,
               letterSpacing: 1.2,
             ),
           ),
@@ -526,7 +526,7 @@ class _RecommendationTile extends StatelessWidget {
             '${recommendation.signalLabel} · ${recommendation.disclaimer}',
             style: AppTypography.inter(
               size: 11,
-              color: AppColors.textDim,
+              color: AppColors.textSecondary,
               height: 1.35,
             ),
           ),

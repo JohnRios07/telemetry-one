@@ -116,7 +116,7 @@ class _SessionListTile extends ConsumerWidget {
                     'GT7 local · ${session.validLapCount} vueltas válidas',
                     style: AppTypography.inter(
                       size: 12,
-                      color: AppColors.textSecondary,
+                      color: AppColors.textPrimary,
                       weight: FontWeight.w500,
                     ),
                   ),
