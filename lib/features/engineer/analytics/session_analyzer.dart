@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:collection/collection.dart';
+
 import '../../../core/storage/session_model.dart';
 import '../domain/session_summary.dart';
 
@@ -14,11 +16,7 @@ class SessionAnalyzer {
 
   static EngineerSessionListItem buildListItem(Session session) {
     final List<CompleteLap> laps = validLaps(session);
-    final Duration? bestLap = laps.isEmpty
-        ? null
-        : laps
-              .map((CompleteLap lap) => lap.officialLapTime)
-              .reduce(_minDuration);
+    final Duration? bestLap = _bestLapDuration(laps);
 
     return EngineerSessionListItem(
       sessionId: session.id,
@@ -34,11 +32,7 @@ class SessionAnalyzer {
 
   static SessionSummary buildSummary(Session session) {
     final List<CompleteLap> laps = validLaps(session);
-    final Duration? bestLap = laps.isEmpty
-        ? null
-        : laps
-              .map((CompleteLap lap) => lap.officialLapTime)
-              .reduce(_minDuration);
+    final Duration? bestLap = _bestLapDuration(laps);
     final Duration? averageLap = laps.isEmpty ? null : _averageDuration(laps);
     final List<double> fuelByLap = laps
         .map(fuelUsedForLap)
@@ -160,6 +154,13 @@ class SessionAnalyzer {
     return current <= next ? current : next;
   }
 
+  static Duration? _bestLapDuration(List<CompleteLap> laps) {
+    if (laps.isEmpty) return null;
+    return laps
+        .map((CompleteLap lap) => lap.officialLapTime)
+        .reduce(_minDuration);
+  }
+
   static List<LapSummaryRow> _buildLapRows(
     List<CompleteLap> laps,
     Duration? bestLap,
@@ -214,24 +215,5 @@ class SessionAnalyzer {
 
     final double score = (1 - normalizedSpread).clamp(0.0, 1.0) * 100;
     return score;
-  }
-}
-
-extension _FirstWhereOrNullExtension<T> on List<T> {
-  /// The first element satisfying [test], or `null` if none.
-  T? firstWhereOrNull(bool Function(T) test) {
-    for (final T value in this) {
-      if (test(value)) return value;
-    }
-    return null;
-  }
-
-  /// The last element satisfying [test], or `null` if none.
-  T? lastWhereOrNull(bool Function(T) test) {
-    for (int i = length - 1; i >= 0; i--) {
-      final T value = this[i];
-      if (test(value)) return value;
-    }
-    return null;
   }
 }

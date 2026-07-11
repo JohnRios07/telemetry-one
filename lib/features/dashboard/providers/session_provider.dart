@@ -113,6 +113,8 @@ class SessionRecorder extends StateNotifier<SessionState> {
 
   /// Called from the telemetry stream to buffer a data point.
   void recordPoint(TelemetryData data) {
+    if (_isSaving) return;
+
     final int previousLap = _lastObservedLap ?? 0;
     final bool inFirstLapStartWindow =
         data.currentLap == 1 &&
