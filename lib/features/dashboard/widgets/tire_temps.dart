@@ -17,7 +17,6 @@ class TireTemps extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final temps = ref.watch(tireTempsProvider);
-    final pressures = ref.watch(tirePressuresProvider);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -53,9 +52,6 @@ class TireTemps extends ConsumerWidget {
                             child: _tireWidget(
                               'FL',
                               temps.isNotEmpty ? temps[0] : 0,
-                              pressures != null && pressures.isNotEmpty
-                                  ? pressures[0]
-                                  : null,
                               compact: compactMode,
                             ),
                           ),
@@ -64,9 +60,6 @@ class TireTemps extends ConsumerWidget {
                             child: _tireWidget(
                               'RL',
                               temps.length > 2 ? temps[2] : 0,
-                              pressures != null && pressures.length > 2
-                                  ? pressures[2]
-                                  : null,
                               compact: compactMode,
                             ),
                           ),
@@ -93,9 +86,6 @@ class TireTemps extends ConsumerWidget {
                             child: _tireWidget(
                               'FR',
                               temps.length > 1 ? temps[1] : 0,
-                              pressures != null && pressures.length > 1
-                                  ? pressures[1]
-                                  : null,
                               compact: compactMode,
                             ),
                           ),
@@ -104,9 +94,6 @@ class TireTemps extends ConsumerWidget {
                             child: _tireWidget(
                               'RR',
                               temps.length > 3 ? temps[3] : 0,
-                              pressures != null && pressures.length > 3
-                                  ? pressures[3]
-                                  : null,
                               compact: compactMode,
                             ),
                           ),
@@ -123,7 +110,7 @@ class TireTemps extends ConsumerWidget {
     );
   }
 
-  Widget _tireWidget(String label, double temp, double? pressure, {required bool compact}) {
+  Widget _tireWidget(String label, double temp, {required bool compact}) {
     final color = _tempColor(temp);
 
     return Container(
@@ -162,21 +149,6 @@ class TireTemps extends ConsumerWidget {
                     color: color,
                   ),
                 ),
-              ),
-            ),
-          ),
-          SizedBox(height: compact ? 2 : 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              pressure != null && pressure > 0
-                  ? '${pressure.toStringAsFixed(2)} psi'
-                  : '-- psi',
-              style: AppTypography.inter(
-                size: compact ? 9 : 11,
-                color: AppColors.textPrimary,
-                weight: FontWeight.w500,
               ),
             ),
           ),

@@ -7,7 +7,7 @@ import 'gt7_packet.dart';
 
 /// GT7-specific telemetry parser with Salsa20 decryption.
 ///
-/// Decrypts the 296-byte Packet A using Salsa20, validates the magic
+/// Decrypts the 368-byte Packet C using Salsa20, validates the magic
 /// number (0x47375330 = "G7S0"), and maps fields to [TelemetryData].
 class Gt7Parser extends TelemetryParser {
   final Salsa20Engine _salsa20 = Salsa20Engine();
@@ -18,7 +18,7 @@ class Gt7Parser extends TelemetryParser {
           Gt7Constants.salsa20Key.codeUnits.take(32).toList(),
         );
 
-  /// Decrypt a raw GT7 Packet A and parse into [TelemetryData].
+  /// Decrypt a raw GT7 Packet C and parse into [TelemetryData].
   ///
   /// Returns `null` if the packet is invalid (wrong size, bad magic).
   @override
@@ -53,14 +53,14 @@ class Gt7Parser extends TelemetryParser {
   /// Salsa20 decryption with custom IV generation.
   ///
   /// IV extraction: bytes at offset 0x40 → uint32 LE (iv1)
-  /// iv2 = iv1 XOR 0xDEADBEAF
+  /// iv2 = iv1 XOR 0xDEADBEEF for Packet C ('C' heartbeat)
   /// Nonce = [iv2 LE][iv1 LE] (8 bytes)
-  /// The ENTIRE 296-byte packet is encrypted with Salsa20 (including the magic at offset 0).
+  /// The ENTIRE packet is encrypted with Salsa20 (including the magic at offset 0).
   Uint8List _decrypt(Uint8List encrypted) {
     // Extract IV from raw (encrypted) bytes at offset 0x40
     final iv1 = ByteData.sublistView(encrypted, Gt7Constants.ivOffset, Gt7Constants.ivOffset + 4)
         .getUint32(0, Endian.little);
-    final iv2 = iv1 ^ Gt7Constants.ivXorConstant;
+    final iv2 = iv1 ^ Gt7Constants.packetCXorConstant;
 
     final nonce = Uint8List(8);
     final nonceView = ByteData.view(nonce.buffer, 0, 8);
@@ -84,6 +84,7 @@ class Gt7Parser extends TelemetryParser {
   TelemetryData _toTelemetryData(Gt7Packet packet) {
     return TelemetryData(
       timestamp: DateTime.now(),
+      packetId: packet.packetId,
       speedKmh: packet.speedKmh,
       rpm: packet.rpm,
       gear: packet.currentGear,
@@ -101,6 +102,9 @@ class Gt7Parser extends TelemetryParser {
           : null,
       bestLapTime: packet.bestLapMs >= 0
           ? Duration(milliseconds: packet.bestLapMs)
+          : null,
+      currentLapTime: packet.currentLapTimeMs >= 0
+          ? Duration(milliseconds: packet.currentLapTimeMs)
           : null,
       currentPosition: packet.currentPosition,
       suggestedGear: packet.suggestedGear,

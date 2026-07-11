@@ -5,6 +5,7 @@
 /// into this model.
 class TelemetryData {
   final DateTime timestamp;
+  final int packetId;
 
   // Level 1 — Critical
   final double speedKmh;
@@ -24,6 +25,7 @@ class TelemetryData {
   final int totalLaps;
   final Duration? lastLapTime;
   final Duration? bestLapTime;
+  /// Real live lap time when provided by the source protocol.
   final Duration? currentLapTime;
 
   // Level 3 — Race
@@ -39,6 +41,7 @@ class TelemetryData {
 
   const TelemetryData({
     required this.timestamp,
+    this.packetId = 0,
     this.speedKmh = 0,
     this.rpm = 0,
     this.gear = 0,
@@ -77,7 +80,7 @@ class TelemetryData {
 
   @override
   String toString() =>
-      'TelemetryData(speed: ${speedKmh.toStringAsFixed(0)} km/h, '
+      'TelemetryData(packetId: $packetId, speed: ${speedKmh.toStringAsFixed(0)} km/h, '
       'gear: $gear, rpm: ${rpm.toStringAsFixed(0)}, '
       'fuel: ${fuelPercent.toStringAsFixed(0)}%)';
 }

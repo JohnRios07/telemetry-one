@@ -37,6 +37,7 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
   Widget build(BuildContext context) {
     final lapInfo = ref.watch(lapInfoProvider);
     final data = ref.watch(telemetryDataProvider);
+    final position = ref.watch(currentPositionProvider);
     final isConnected = data != null;
 
     return Container(
@@ -119,8 +120,22 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
             ),
           if (lapInfo.totalLaps > 0) const SizedBox(width: 18),
 
-          if (lapInfo.totalLaps > 0) _HeaderDivider(),
-          if (lapInfo.totalLaps > 0) const SizedBox(width: 18),
+          if (position > 0) _HeaderDivider(),
+          if (position > 0) const SizedBox(width: 18),
+          if (position > 0)
+            Text(
+              'POS P$position',
+              style: AppTypography.orbitron(
+                size: 14,
+                weight: FontWeight.w600,
+                color: AppColors.textPrimary,
+                letterSpacing: 1.2,
+              ),
+            ),
+          if (position > 0) const SizedBox(width: 18),
+
+          if (lapInfo.totalLaps > 0 || position > 0) _HeaderDivider(),
+          if (lapInfo.totalLaps > 0 || position > 0) const SizedBox(width: 18),
 
           Expanded(
             child: Text(

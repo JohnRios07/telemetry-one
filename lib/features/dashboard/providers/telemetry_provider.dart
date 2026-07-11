@@ -1,9 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/models/telemetry_data.dart';
 import '../../../core/network/udp_service.dart';
 import '../../../core/telemetry/gt7/gt7_parser.dart';
 import 'telemetry_buffer.dart';
+import 'track_history_buffer.dart';
 
 /// Singleton instance of the UDP service.
 final udpServiceProvider = Provider<UdpService>((ref) {
@@ -67,6 +69,87 @@ class TelemetryBufferNotifier extends StateNotifier<TelemetryBuffer> {
   }
 }
 
+final trackHistoryProvider =
+    StateNotifierProvider<TrackHistoryNotifier, TrackHistoryBuffer>((ref) {
+      final notifier = TrackHistoryNotifier();
+      ref.onDispose(() => notifier.dispose());
+      return notifier;
+    });
+
+class TrackHistoryNotifier extends StateNotifier<TrackHistoryBuffer> {
+  TrackHistoryNotifier() : super(TrackHistoryBuffer());
+
+  static const double _emergencyTeleportDistanceSquared = 250000;
+  static const double _fallbackPositionJumpDistanceSquared = 10000;
+  static const double _lowSpeedThresholdKmh = 15;
+  static const Duration _nearZeroLapTimeThreshold = Duration(seconds: 2);
+
+  TelemetryData? _lastTelemetry;
+
+  void ingest(TelemetryData data) {
+    final nextState = state.copy();
+
+    if (_shouldResetForNewSession(data)) {
+      nextState.clear();
+    }
+
+    nextState.add(data.posX, data.posZ);
+    state = nextState;
+    _lastTelemetry = data;
+  }
+
+  void clear() {
+    final nextState = state.copy();
+    nextState.clear();
+    state = nextState;
+    _lastTelemetry = null;
+  }
+
+  bool _shouldResetForNewSession(TelemetryData data) {
+    final previous = _lastTelemetry;
+    if (previous == null) return false;
+
+    if (data.packetId < previous.packetId) {
+      debugPrint(
+        '[TrackHistory] Clearing map after packetId rewind '
+        '(${previous.packetId} -> ${data.packetId}).',
+      );
+      return true;
+    }
+
+    final dx = previous.posX - data.posX;
+    final dz = previous.posZ - data.posZ;
+    final movedSquared = (dx * dx) + (dz * dz);
+
+    final lapWentBackwards = data.currentLap < previous.currentLap;
+    final nearZeroLapTime =
+        data.currentLapTime != null &&
+        data.currentLapTime! <= _nearZeroLapTimeThreshold;
+    final lowSpeedAndPositionJump =
+        data.speedKmh <= _lowSpeedThresholdKmh &&
+        movedSquared >= _fallbackPositionJumpDistanceSquared;
+
+    if (lapWentBackwards && (nearZeroLapTime || lowSpeedAndPositionJump)) {
+      debugPrint(
+        '[TrackHistory] Clearing map after lap reset heuristic '
+        '(lap ${previous.currentLap} -> ${data.currentLap}, '
+        'lapTime=${data.currentLapTime}, speed=${data.speedKmh.toStringAsFixed(1)}).',
+      );
+      return true;
+    }
+
+    if (movedSquared >= _emergencyTeleportDistanceSquared) {
+      debugPrint(
+        '[TrackHistory] Clearing map after emergency teleport '
+        '(distanceSquared=${movedSquared.toStringAsFixed(0)}).',
+      );
+      return true;
+    }
+
+    return false;
+  }
+}
+
 // --- Individual field selectors for efficient widget rebuilds ---
 
 final currentRpmProvider = Provider<double>((ref) {
@@ -103,10 +186,6 @@ final fuelCapacityProvider = Provider<double>((ref) {
 
 final tireTempsProvider = Provider<List<double>>((ref) {
   return ref.watch(telemetryDataProvider)?.tireTemps ?? [0, 0, 0, 0];
-});
-
-final tirePressuresProvider = Provider<List<double>?>((ref) {
-  return ref.watch(telemetryDataProvider)?.tirePressures;
 });
 
 final currentPositionProvider = Provider<int>((ref) {

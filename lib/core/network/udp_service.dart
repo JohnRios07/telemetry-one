@@ -13,7 +13,7 @@ enum UdpConnectionState {
 
 /// UDP service that receives GT7 telemetry packets.
 ///
-/// Opens a [RawDatagramSocket] on port 33740, sends heartbeat 'A' to
+/// Opens a [RawDatagramSocket] on port 33740, sends the Packet C heartbeat to
 /// the PS5 at 33739 every 100ms, and exposes a [Stream] of raw bytes.
 class UdpService {
   RawDatagramSocket? _socket;
@@ -106,7 +106,7 @@ class UdpService {
     _setState(UdpConnectionState.disconnected);
   }
 
-  /// Send heartbeat 'A' to PS5 every 100ms to maintain the data stream.
+  /// Send the Packet C request heartbeat to PS5 every 100ms.
   void _startHeartbeat() {
     _heartbeatTimer = Timer.periodic(AppConfig.heartbeatInterval, (_) {
       if (_ps5Ip == null) return;

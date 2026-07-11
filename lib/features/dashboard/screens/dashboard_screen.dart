@@ -12,6 +12,7 @@ import '../widgets/rpm_bar.dart';
 import '../widgets/throttle_brake_bar.dart';
 import '../widgets/lap_times.dart';
 import '../widgets/fuel_indicator.dart';
+import '../widgets/player_track_map.dart';
 import '../widgets/tire_temps.dart';
 
 /// Landscape dashboard with strong visual hierarchy inspired by motorsport pits.
@@ -33,6 +34,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       (_, data) {
         if (data == null) return;
         ref.read(telemetryBufferProvider.notifier).add(data.throttle, data.brake);
+        ref.read(trackHistoryProvider.notifier).ingest(data);
       },
       fireImmediately: true,
     );
@@ -73,9 +75,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget _buildTopRow() {
     return Row(
       children: [
-        const Expanded(flex: 72, child: TelemetryGraph()),
+        const Expanded(flex: 78, child: TelemetryGraph()),
         const SizedBox(width: 10),
-        const Expanded(flex: 28, child: LapTimesPanel()),
+        const Expanded(flex: 22, child: FuelIndicator()),
       ],
     );
   }
@@ -83,11 +85,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget _buildMiddleRow() {
     return Row(
       children: [
-        const Expanded(flex: 29, child: ThrottleBrakeBar()),
+        const Expanded(flex: 21, child: ThrottleBrakeBar()),
         const SizedBox(width: 10),
-        const Expanded(flex: 51, child: _SpeedClusterCard()),
+        const Expanded(flex: 43, child: _SpeedClusterCard()),
         const SizedBox(width: 10),
-        const Expanded(flex: 20, child: FuelIndicator()),
+        const Expanded(flex: 36, child: LapTimesPanel()),
       ],
     );
   }
@@ -96,14 +98,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxHeight < 210;
-        final gap = compact ? 8.0 : 10.0;
 
         return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(flex: 1, child: TireTemps(compact: compact)),
-            SizedBox(width: gap),
-            Expanded(flex: 1, child: _EngineeringInfoCard(compact: compact)),
+            Expanded(flex: 42, child: TireTemps(compact: compact)),
+            const SizedBox(width: 10),
+            const Expanded(flex: 58, child: PlayerTrackMap()),
           ],
         );
       },
@@ -147,7 +147,7 @@ class _SpeedClusterCard extends ConsumerWidget {
           child: Row(
             children: [
               Expanded(
-                flex: 56,
+                flex: 60,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -235,7 +235,7 @@ class _SpeedClusterCard extends ConsumerWidget {
                 color: AppColors.darkSurface,
               ),
               Expanded(
-                flex: 44,
+                flex: 40,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -288,179 +288,6 @@ class _SpeedClusterCard extends ConsumerWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _EngineeringInfoCard extends ConsumerWidget {
-  final bool compact;
-
-  const _EngineeringInfoCard({this.compact = false});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final position = ref.watch(currentPositionProvider);
-    final rpm = ref.watch(currentRpmProvider);
-    final limiter = ref.watch(revLimiterProvider);
-    final fuelLiters = ref.watch(currentFuelProviderRaw);
-    final fuelCapacity = ref.watch(fuelCapacityProvider);
-    final throttle = ref.watch(currentThrottleProvider);
-    final brake = ref.watch(currentBrakeProvider);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compactMode = compact || constraints.maxHeight < 180;
-
-        return Container(
-          padding: EdgeInsets.all(compactMode ? 10 : 14),
-          decoration: BoxDecoration(
-            color: AppColors.graphite,
-            border: Border.all(color: AppColors.darkSurface, width: 0.75),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'ENGINEERING',
-                style: AppTypography.inter(
-                  size: compactMode ? 11 : 12,
-                  color: AppColors.neonCyan,
-                  weight: FontWeight.w600,
-                  letterSpacing: 1.6,
-                ),
-              ),
-              SizedBox(height: compactMode ? 6 : 12),
-              Expanded(
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: _InfoMetric(
-                              compact: compactMode,
-                              label: 'POSITION',
-                              value: position > 0 ? 'P$position' : '--',
-                            ),
-                          ),
-                          SizedBox(height: compactMode ? 6 : 10),
-                          Expanded(
-                            child: _InfoMetric(
-                              compact: compactMode,
-                              label: 'FUEL LOAD',
-                              value: fuelCapacity > 0
-                                  ? '${fuelLiters.toStringAsFixed(1)} / ${fuelCapacity.toStringAsFixed(0)}L'
-                                  : '${fuelLiters.toStringAsFixed(1)}L',
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(width: compactMode ? 6 : 10),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: _InfoMetric(
-                              compact: compactMode,
-                              label: 'RPM LIMIT',
-                              value: limiter > 0
-                                  ? limiter.toStringAsFixed(0)
-                                  : '--',
-                            ),
-                          ),
-                          SizedBox(height: compactMode ? 6 : 10),
-                          Expanded(
-                            child: _InfoMetric(
-                              compact: compactMode,
-                              label: 'ENGINE LOAD',
-                              value:
-                                  'THR ${(throttle * 100).round()}% / BRK ${(brake * 100).round()}%',
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: compactMode ? 4 : 8),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'LIVE RPM ${rpm.toStringAsFixed(0)}',
-                  style: AppTypography.orbitron(
-                    size: compactMode ? 15 : 18,
-                    weight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _InfoMetric extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool compact;
-
-  const _InfoMetric({
-    required this.label,
-    required this.value,
-    this.compact = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(compact ? 10 : 12),
-      decoration: BoxDecoration(
-        color: AppColors.carbonBlack,
-        border: Border.all(color: AppColors.darkSurface, width: 0.75),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: AppTypography.inter(
-              size: compact ? 9 : 10,
-              color: AppColors.textSecondary,
-              weight: FontWeight.w500,
-              letterSpacing: 1.2,
-            ),
-          ),
-          SizedBox(height: compact ? 4 : 6),
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.orbitron(
-                    size: compact ? 15 : 20,
-                    weight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

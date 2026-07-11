@@ -6,7 +6,7 @@ class AppConfig {
   static const int gt7SendPort = 33739;
   static const int gt7ListenPort = 33740;
   static const Duration heartbeatInterval = Duration(milliseconds: 100);
-  static const String heartbeatChar = 'A';
+  static const String heartbeatChar = 'C';
 
   // Performance
   static const Duration uiThrottle = Duration(milliseconds: 100);

@@ -1,10 +1,11 @@
 import 'dart:typed_data';
 import 'gt7_constants.dart';
 
-/// Raw GT7 Packet A parsed from decrypted bytes.
+/// Raw GT7 Packet C parsed from decrypted bytes.
 ///
-/// Contains ALL fields from the GT7 UDP protocol (Packet A, 296 bytes).
-/// Derived getters provide normalized values for the UI layer.
+/// Packet C (0x170 / 368 bytes) is a superset of Packet ~ and Packet A for the
+/// shared core telemetry block used by the dashboard. Derived getters provide
+/// normalized values for the UI layer.
 class Gt7Packet {
   final int magic;
   final double posX;
@@ -15,11 +16,12 @@ class Gt7Packet {
   final double fuelCapacity;
   final double carSpeed;
   final List<double> tyreTemps;
-  final int packageId;
+  final int packetId;
   final int currentLap;
   final int totalLaps;
   final int bestLapMs;
   final int lastLapMs;
+  final int currentLapTimeMs;
   final int currentPosition;
   final int rpmRevWarning;
   final int rpmRevLimiter;
@@ -39,11 +41,12 @@ class Gt7Packet {
     required this.fuelCapacity,
     required this.carSpeed,
     required this.tyreTemps,
-    required this.packageId,
+    required this.packetId,
     required this.currentLap,
     required this.totalLaps,
     required this.bestLapMs,
     required this.lastLapMs,
+    required this.currentLapTimeMs,
     required this.currentPosition,
     required this.rpmRevWarning,
     required this.rpmRevLimiter,
@@ -65,11 +68,11 @@ class Gt7Packet {
   int get suggestedGear => gears >> 4;
   bool get isOnTrack => (simulatorFlags & 0x01) != 0;
 
-  /// Parse a decrypted 296-byte Packet A.
+  /// Parse a decrypted Packet C payload.
   static Gt7Packet fromDecryptedBytes(Uint8List data) {
-    if (data.length < Gt7Constants.packetASize) {
+    if (data.length < Gt7Constants.expectedPacketSize) {
       throw ArgumentError(
-          'Packet too short: ${data.length} < ${Gt7Constants.packetASize}');
+          'Packet too short: ${data.length} < ${Gt7Constants.expectedPacketSize}');
     }
 
     final buf = ByteData.sublistView(data);
@@ -91,11 +94,13 @@ class Gt7Packet {
         buf.getFloat32(Gt7Constants.offsetTyreTemp + 8, Endian.little),
         buf.getFloat32(Gt7Constants.offsetTyreTemp + 12, Endian.little),
       ],
-      packageId: buf.getInt32(Gt7Constants.offsetPackageId, Endian.little),
+      packetId: buf.getInt32(Gt7Constants.offsetPackageId, Endian.little),
       currentLap: buf.getInt16(Gt7Constants.offsetCurrentLap, Endian.little),
       totalLaps: buf.getInt16(Gt7Constants.offsetTotalLaps, Endian.little),
       bestLapMs: buf.getInt32(Gt7Constants.offsetBestLap, Endian.little),
       lastLapMs: buf.getInt32(Gt7Constants.offsetLastLap, Endian.little),
+      currentLapTimeMs:
+          buf.getInt32(Gt7Constants.offsetCurrentLapTime, Endian.little),
       currentPosition:
           buf.getInt16(Gt7Constants.offsetCurrentPosition, Endian.little),
       rpmRevWarning:

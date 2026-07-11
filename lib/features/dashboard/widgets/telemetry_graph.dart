@@ -5,7 +5,7 @@ import '../../../../config/theme/app_colors.dart';
 import '../../../../config/theme/app_typography.dart';
 import '../providers/telemetry_provider.dart';
 
-/// MoTeC-style telemetry graph showing throttle (green) and brake (orange) traces.
+/// MoTeC-style telemetry graph showing throttle (green) and brake (red) traces.
 ///
 /// Scrolling time-series with grid lines, legend, and percentage axis.
 class TelemetryGraph extends ConsumerWidget {
@@ -52,7 +52,7 @@ class TelemetryGraph extends ConsumerWidget {
                 'BRAKE',
                 style: AppTypography.inter(
                   size: 11,
-                  color: AppColors.telemetryOrange,
+                  color: AppColors.error,
                   weight: FontWeight.w600,
                   letterSpacing: 1.4,
                 ),
@@ -69,7 +69,7 @@ class TelemetryGraph extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              _legendLine(AppColors.telemetryOrange),
+              _legendLine(AppColors.error),
               const SizedBox(width: 6),
               Text(
                 'BRAKE',
@@ -155,8 +155,8 @@ class _GraphPainter extends CustomPainter {
       ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
 
-    final orangePaint = Paint()
-      ..color = AppColors.telemetryOrange.withValues(alpha: 0.9)
+    final brakePaint = Paint()
+      ..color = AppColors.error.withValues(alpha: 0.9)
       ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
 
@@ -184,7 +184,7 @@ class _GraphPainter extends CustomPainter {
         brakePath.lineTo(x, y);
       }
     }
-    canvas.drawPath(brakePath, orangePaint);
+    canvas.drawPath(brakePath, brakePaint);
 
     // ─── Y axis labels ─────────────────────────────────────────
     final labelStyle = TextStyle(

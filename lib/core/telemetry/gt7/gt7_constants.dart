@@ -10,17 +10,23 @@ class Gt7Constants {
   // Salsa20
   static const String salsa20Key = 'Simulator Interface Packet GT7 ver 0.0';
   static const int ivOffset = 0x40;
-  static final int ivXorConstant = 0xDEADBEAF;
+  static const int packetAXorConstant = 0xDEADBEAF;
+  static const int packetBXorConstant = 0xDEADBEEF;
+  static const int packetTXorConstant = 0x55FABB4F;
+  static const int packetCXorConstant = 0xDEADBEEF;
   static const int salsaDataOffset = 0x28;
 
   // Packet validation
   static final int magicNumber = 0x47375330; // "G7S0"
   static const int magicOffset = 0x00;
 
-  // Packet A size
-  static const int packetASize = 296;
+  // Packet sizes by heartbeat/request type.
+  static const int packetASize = 0x128;
+  static const int packetBSize = 0x13C;
+  static const int packetCSize = 0x170;
+  static const int expectedPacketSize = packetCSize;
 
-  // Field offsets (Packet A)
+  // Core field offsets shared by Packet A/B/C.
   static const int offsetPosition = 0x04; // float[3]
   static const int offsetVelocity = 0x10; // float[3]
   static const int offsetRpm = 0x3C; // float
@@ -44,4 +50,7 @@ class Gt7Constants {
   static const int offsetBrake = 0x92; // uint8 (0-255)
   static const int offsetClutch = 0xF4; // float
   static const int offsetCarId = 0x124; // int32
+
+  // Packet C extensions.
+  static const int offsetCurrentLapTime = 0x15C; // int32 (ms)
 }
