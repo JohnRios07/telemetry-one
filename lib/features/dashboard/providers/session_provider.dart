@@ -1,12 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../core/models/telemetry_data.dart';
+import '../../../core/recording/complete_lap_recorder.dart';
 import '../../../core/storage/session_model.dart';
 import '../../../core/storage/session_repository.dart';
 
 /// Manages session recording state.
 ///
-/// When recording, telemetry points are buffered and periodically
-/// flushed to Hive storage.
+/// When recording, completed laps are persisted when recording stops.
 final sessionRecorderProvider =
     StateNotifierProvider<SessionRecorder, SessionState>((ref) {
   return SessionRecorder();
@@ -31,11 +32,14 @@ class SessionState {
 
 class SessionRecorder extends StateNotifier<SessionState> {
   final SessionRepository _repository = SessionRepository();
+  final CompleteLapRecorder _lapRecorder = CompleteLapRecorder();
 
   SessionRecorder() : super(const SessionState());
 
   /// Start recording telemetry data to a new session.
   void startRecording() {
+    _lapRecorder.reset();
+
     final session = Session(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       startTime: DateTime.now(),
@@ -58,18 +62,25 @@ class SessionRecorder extends StateNotifier<SessionState> {
     );
 
     try {
+      final completedLaps = _lapRecorder.completedLaps;
+      final completedPoints = completedLaps
+          .expand<TelemetryPoint>((lap) => lap.points)
+          .toList(growable: false);
       final finalSession = Session(
         id: state.currentSession!.id,
         startTime: state.currentSession!.startTime,
         endTime: DateTime.now(),
         game: state.currentSession!.game,
-        points: _bufferedPoints,
+        ps5Ip: state.currentSession!.ps5Ip,
+        points: completedPoints,
+        laps: completedLaps,
       );
 
       await _repository.saveSession(finalSession);
-      _bufferedPoints.clear();
+      _lapRecorder.reset();
       state = const SessionState(status: RecordingStatus.idle);
     } catch (e) {
+      _lapRecorder.reset();
       state = SessionState(
         status: RecordingStatus.idle,
         error: 'Failed to save session: $e',
@@ -77,19 +88,9 @@ class SessionRecorder extends StateNotifier<SessionState> {
     }
   }
 
-  // Simple in-memory buffer for recording
-  final List<TelemetryPoint> _bufferedPoints = [];
-
   /// Called from the telemetry stream to buffer a data point.
   void recordPoint(TelemetryData data) {
     if (!state.isRecording) return;
-    _bufferedPoints.add(TelemetryPoint(
-      timestamp: data.timestamp,
-      speedKmh: data.speedKmh,
-      rpm: data.rpm,
-      gear: data.gear,
-      throttle: data.throttle,
-      brake: data.brake,
-    ));
+    _lapRecorder.ingest(data);
   }
 }
