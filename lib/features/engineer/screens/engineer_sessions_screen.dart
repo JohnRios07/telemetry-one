@@ -1,0 +1,262 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../config/theme/app_colors.dart';
+import '../../../config/theme/app_typography.dart';
+import '../../../shared/widgets/panel_card.dart';
+import '../domain/session_summary.dart';
+import '../providers/engineer_session_providers.dart';
+import 'engineer_session_detail_screen.dart';
+
+class EngineerSessionsScreen extends ConsumerWidget {
+  const EngineerSessionsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<List<EngineerSessionListItem>> sessionsAsync = ref.watch(
+      engineerSessionsProvider,
+    );
+
+    return Scaffold(
+      backgroundColor: AppColors.carbonBlack,
+      appBar: AppBar(
+        backgroundColor: AppColors.graphite,
+        title: Text(
+          'Engineer',
+          style: AppTypography.orbitron(
+            size: 18,
+            weight: FontWeight.w700,
+            letterSpacing: 1.4,
+          ),
+        ),
+      ),
+      body: sessionsAsync.when(
+        data: (List<EngineerSessionListItem> sessions) {
+          if (sessions.isEmpty) {
+            return const _EngineerEmptyState();
+          }
+
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: sessions.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
+            itemBuilder: (BuildContext context, int index) {
+              final EngineerSessionListItem session = sessions[index];
+              return _SessionListTile(session: session);
+            },
+          );
+        },
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: AppColors.telemetryOrange),
+        ),
+        error: (Object error, StackTrace stackTrace) {
+          return _EngineerFeedback(
+            title: 'No pudimos cargar tus sesiones',
+            detail:
+                'Engineer V1 usa solo sesiones GT7 guardadas localmente. Error: $error',
+            icon: Icons.storage_rounded,
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SessionListTile extends ConsumerWidget {
+  final EngineerSessionListItem session;
+
+  const _SessionListTile({required this.session});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return PanelCard(
+      padding: const EdgeInsets.all(14),
+      child: InkWell(
+        onTap: () {
+          ref.read(selectedEngineerSessionIdProvider.notifier).state =
+              session.sessionId;
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) =>
+                  EngineerSessionDetailScreen(sessionId: session.sessionId),
+            ),
+          );
+        },
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    _formatDateTime(session.startTime),
+                    style: AppTypography.orbitron(
+                      size: 16,
+                      weight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'GT7 local · ${session.validLapCount} vueltas válidas',
+                    style: AppTypography.inter(
+                      size: 12,
+                      color: AppColors.textSecondary,
+                      weight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      _SessionChip(
+                        label: 'Best',
+                        value: _formatDuration(session.bestLap),
+                      ),
+                      _SessionChip(
+                        label: 'Duration',
+                        value: _formatDuration(session.sessionDuration),
+                      ),
+                      _SessionChip(label: 'Source', value: session.game),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.neonCyan,
+              size: 28,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EngineerEmptyState extends StatelessWidget {
+  const _EngineerEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _EngineerFeedback(
+      title: 'Todavía no hay sesiones para revisar',
+      detail: 'Engineer siempre está disponible, pero solo muestra sesiones GT7 con al menos una vuelta completa guardada.',
+      icon: Icons.insights_rounded,
+    );
+  }
+}
+
+class _EngineerFeedback extends StatelessWidget {
+  final String title;
+  final String detail;
+  final IconData icon;
+
+  const _EngineerFeedback({
+    required this.title,
+    required this.detail,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: PanelCard(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(icon, size: 42, color: AppColors.neonCyan),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: AppTypography.orbitron(
+                  size: 18,
+                  weight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                detail,
+                textAlign: TextAlign.center,
+                style: AppTypography.inter(
+                  size: 13,
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionChip extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _SessionChip({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.darkSurface,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            label.toUpperCase(),
+            style: AppTypography.inter(
+              size: 10,
+              color: AppColors.textDim,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: AppTypography.orbitron(
+              size: 14,
+              weight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatDateTime(DateTime value) {
+  final String day = value.day.toString().padLeft(2, '0');
+  final String month = value.month.toString().padLeft(2, '0');
+  final String year = value.year.toString();
+  final String hour = value.hour.toString().padLeft(2, '0');
+  final String minute = value.minute.toString().padLeft(2, '0');
+  return '$day/$month/$year · $hour:$minute';
+}
+
+String _formatDuration(Duration? value) {
+  if (value == null) {
+    return 'N/D';
+  }
+
+  final int totalMilliseconds = value.inMilliseconds.abs();
+  final int minutes = totalMilliseconds ~/ 60000;
+  final int seconds = (totalMilliseconds % 60000) ~/ 1000;
+  final int centiseconds = (totalMilliseconds % 1000) ~/ 10;
+  return '$minutes:${seconds.toString().padLeft(2, '0')}.${centiseconds.toString().padLeft(2, '0')}';
+}

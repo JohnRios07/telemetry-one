@@ -1,8 +1,11 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../../config/theme/app_colors.dart';
 import '../../../../config/theme/app_typography.dart';
+import '../../engineer/screens/engineer_sessions_screen.dart';
 import '../providers/telemetry_provider.dart';
 
 /// Top header bar with logo, live indicator, lap info, and status.
@@ -153,6 +156,10 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
 
           const SizedBox(width: 18),
 
+          _EngineerEntryButton(onTap: _openEngineer),
+
+          const SizedBox(width: 18),
+
           Icon(
             Icons.sports_esports_rounded,
             color: isConnected ? AppColors.textPrimary : AppColors.textDim,
@@ -189,11 +196,7 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
 
           const SizedBox(width: 18),
 
-          Icon(
-            Icons.settings_rounded,
-            color: AppColors.textDim,
-            size: 20,
-          ),
+          Icon(Icons.settings_rounded, color: AppColors.textDim, size: 20),
         ],
       ),
     );
@@ -202,16 +205,18 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
   String _formatTime(DateTime t) {
     return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
   }
+
+  void _openEngineer() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const EngineerSessionsScreen()),
+    );
+  }
 }
 
 class _HeaderDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 24,
-      color: AppColors.darkSurface,
-    );
+    return Container(width: 1, height: 24, color: AppColors.darkSurface);
   }
 }
 
@@ -253,13 +258,16 @@ class _LiveDotState extends State<_LiveDot>
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: widget.isConnected
-                ? AppColors.error.withValues(alpha: 0.4 + _controller.value * 0.6)
+                ? AppColors.error.withValues(
+                    alpha: 0.4 + _controller.value * 0.6,
+                  )
                 : AppColors.textDim,
             boxShadow: widget.isConnected
                 ? [
                     BoxShadow(
-                      color: AppColors.error
-                          .withValues(alpha: 0.3 * _controller.value),
+                      color: AppColors.error.withValues(
+                        alpha: 0.3 * _controller.value,
+                      ),
                       blurRadius: 4,
                     ),
                   ]
@@ -267,6 +275,48 @@ class _LiveDotState extends State<_LiveDot>
           ),
         );
       },
+    );
+  }
+}
+
+class _EngineerEntryButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _EngineerEntryButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.darkSurface,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: AppColors.neonCyan.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.insights_rounded,
+              color: AppColors.neonCyan,
+              size: 18,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'ENGINEER',
+              style: AppTypography.inter(
+                size: 11,
+                color: AppColors.textPrimary,
+                weight: FontWeight.w700,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
