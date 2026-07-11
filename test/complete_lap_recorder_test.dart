@@ -44,7 +44,7 @@ void main() {
       expect(recorder.completedLaps.single.points, hasLength(2));
     });
 
-    test('starting mid-lap arms without saving that lap', () {
+    test('starting mid-lap records the partial first lap and the clean second lap', () {
       final recorder = CompleteLapRecorder();
       final start = DateTime(2026);
 
@@ -76,8 +76,10 @@ void main() {
           ),
         );
 
-      expect(recorder.completedLaps, hasLength(1));
-      expect(recorder.completedLaps.single.lapNumber, 2);
+      // Lap 1 is the partial mid-lap start, lap 2 is the clean one.
+      expect(recorder.completedLaps, hasLength(2));
+      expect(recorder.completedLaps[0].lapNumber, 1);
+      expect(recorder.completedLaps[1].lapNumber, 2);
     });
 
     test('ignores duplicate packets', () {

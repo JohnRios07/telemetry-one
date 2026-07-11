@@ -85,6 +85,15 @@ class CompleteLap {
     this.points = const [],
   });
 
+  /// Whether this lap should be considered valid for engineer analysis.
+  ///
+  /// A lap is valid when it has a positive recorded time and is not
+  /// flagged as an out-lap or pit-lap by the game protocol.
+  bool get isValidForEngineer =>
+      officialLapTime > Duration.zero &&
+      isOutLap != true &&
+      isPitLap != true;
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'lap_number': lapNumber,
@@ -105,6 +114,7 @@ class Session {
   final DateTime? endTime;
   final String game;
   final String? ps5Ip;
+  final String? trackName;
   final List<TelemetryPoint> points;
   final List<CompleteLap> laps;
 
@@ -114,6 +124,7 @@ class Session {
     this.endTime,
     this.game = 'GT7',
     this.ps5Ip,
+    this.trackName,
     this.points = const [],
     this.laps = const [],
   });
@@ -129,6 +140,7 @@ class Session {
     'end_time': endTime?.toIso8601String(),
     'game': game,
     'ps5_ip': ps5Ip,
+    'track_name': trackName,
     'points': points.map((p) => p.toJson()).toList(),
     'laps': laps.map((lap) => lap.toJson()).toList(),
   };

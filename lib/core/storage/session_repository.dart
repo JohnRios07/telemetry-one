@@ -34,6 +34,27 @@ class SessionRepository {
     return sessions;
   }
 
+  /// Retrieve a single saved session by ID.
+  Future<Session?> getSessionById(String id) async {
+    final String? json = _box.get(id) as String?;
+    if (json == null) {
+      return null;
+    }
+
+    return _parseSession(json);
+  }
+
+  /// Retrieve GT7 sessions that contain at least one usable complete lap.
+  Future<List<Session>> getEngineerSessions() async {
+    final List<Session> sessions = await getSessions();
+    return sessions.where(isEngineerSession).toList(growable: false);
+  }
+
+  bool isEngineerSession(Session session) {
+    return session.game.toUpperCase() == 'GT7' &&
+        session.laps.any((lap) => lap.isValidForEngineer);
+  }
+
   /// Delete a session by ID.
   Future<void> deleteSession(String id) async {
     await _box.delete(id);
@@ -50,6 +71,7 @@ class SessionRepository {
             : null,
         game: map['game'] as String? ?? 'GT7',
         ps5Ip: map['ps5_ip'] as String?,
+        trackName: map['track_name'] as String?,
         points:
             (map['points'] as List?)
                 ?.map((p) => _parsePoint(p as Map<String, dynamic>))
