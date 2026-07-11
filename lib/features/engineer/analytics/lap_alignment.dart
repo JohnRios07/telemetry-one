@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../../../core/storage/session_model.dart';
+import 'lap_sampling.dart';
 import '../domain/lap_comparison.dart';
 import 'session_analyzer.dart';
 
@@ -47,14 +48,8 @@ class LapAlignment {
       );
     }
 
-    final _PreparedLap bestPrepared = _PreparedLap.fromLap(
-      bestLap,
-      bucketCount,
-    );
-    final _PreparedLap lastPrepared = _PreparedLap.fromLap(
-      lastLap,
-      bucketCount,
-    );
+    final _PreparedLap bestPrepared = _PreparedLap.fromLap(bestLap, bucketCount);
+    final _PreparedLap lastPrepared = _PreparedLap.fromLap(lastLap, bucketCount);
     final bool useProgressAlignment =
         bestPrepared.canUseProgressAlignment &&
         lastPrepared.canUseProgressAlignment;
@@ -162,12 +157,17 @@ class _PreparedLap {
         .map(_PreparedPoint.fromTelemetryPoint)
         .toList(growable: false);
 
-    final _ProgressData? progressData = _ProgressData.tryFromPoints(rawPoints);
+    final NormalizedLapSample? progressSample = LapSampling.sampleByProgress(
+      lap,
+      bucketCount: bucketCount,
+    );
     return _PreparedLap(
-      canUseProgressAlignment: progressData != null,
-      progressSamples:
-          progressData?.sample(bucketCount) ??
-          List<_PreparedPoint?>.filled(bucketCount, null),
+      canUseProgressAlignment: progressSample != null,
+      progressSamples: progressSample == null
+          ? List<_PreparedPoint?>.filled(bucketCount, null)
+          : progressSample.buckets
+                .map(_PreparedPoint.fromNormalizedBucket)
+                .toList(growable: false),
       indexSamples: _sampleByIndex(rawPoints, bucketCount),
     );
   }
@@ -231,6 +231,22 @@ class _PreparedPoint {
     );
   }
 
+  static _PreparedPoint? fromNormalizedBucket(NormalizedLapBucket? bucket) {
+    if (bucket == null) {
+      return null;
+    }
+
+    return _PreparedPoint(
+      progress: bucket.progress,
+      speedKmh: bucket.speedKmh,
+      throttle: bucket.throttle,
+      brake: bucket.brake,
+      posX: bucket.posX,
+      posY: bucket.posY,
+      posZ: bucket.posZ,
+    );
+  }
+
   _PreparedPoint copyWith({double? progress}) {
     return _PreparedPoint(
       progress: progress ?? this.progress,
@@ -241,81 +257,5 @@ class _PreparedPoint {
       posY: posY,
       posZ: posZ,
     );
-  }
-}
-
-class _ProgressData {
-  final List<_PreparedPoint> points;
-
-  const _ProgressData(this.points);
-
-  static _ProgressData? tryFromPoints(List<_PreparedPoint> points) {
-    if (points.length < 2) {
-      return null;
-    }
-
-    final List<double> cumulativeDistance = <double>[0];
-    double totalDistance = 0;
-
-    for (int index = 1; index < points.length; index += 1) {
-      final _PreparedPoint previous = points[index - 1];
-      final _PreparedPoint current = points[index];
-      if (previous.posX == null ||
-          previous.posY == null ||
-          previous.posZ == null) {
-        return null;
-      }
-      if (current.posX == null ||
-          current.posY == null ||
-          current.posZ == null) {
-        return null;
-      }
-
-      final double dx = current.posX! - previous.posX!;
-      final double dy = current.posY! - previous.posY!;
-      final double dz = current.posZ! - previous.posZ!;
-      totalDistance += math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
-      cumulativeDistance.add(totalDistance);
-    }
-
-    if (totalDistance <= 0) {
-      return null;
-    }
-
-    final List<_PreparedPoint> normalizedPoints = <_PreparedPoint>[];
-    for (int index = 0; index < points.length; index += 1) {
-      normalizedPoints.add(
-        points[index].copyWith(
-          progress: cumulativeDistance[index] / totalDistance,
-        ),
-      );
-    }
-
-    return _ProgressData(normalizedPoints);
-  }
-
-  List<_PreparedPoint?> sample(int bucketCount) {
-    return List<_PreparedPoint?>.generate(bucketCount, (int index) {
-      final double targetProgress = bucketCount <= 1
-          ? 0
-          : index / (bucketCount - 1);
-      _PreparedPoint? closest;
-      double? smallestDistance;
-
-      for (final _PreparedPoint point in points) {
-        final double distance = (point.progress - targetProgress).abs();
-        if (smallestDistance == null || distance < smallestDistance) {
-          smallestDistance = distance;
-          closest = point;
-        }
-      }
-
-      if (closest == null ||
-          (smallestDistance != null && smallestDistance > 0.08)) {
-        return null;
-      }
-
-      return closest;
-    }, growable: false);
   }
 }
