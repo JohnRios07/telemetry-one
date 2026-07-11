@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/telemetry_data.dart';
@@ -10,8 +12,8 @@ import '../../../core/storage/session_repository.dart';
 /// When recording, completed laps are persisted when recording stops.
 final sessionRecorderProvider =
     StateNotifierProvider<SessionRecorder, SessionState>((ref) {
-  return SessionRecorder();
-});
+      return SessionRecorder();
+    });
 
 /// Current session recording state.
 enum RecordingStatus { idle, recording, saving }
@@ -91,6 +93,18 @@ class SessionRecorder extends StateNotifier<SessionState> {
   /// Called from the telemetry stream to buffer a data point.
   void recordPoint(TelemetryData data) {
     if (!state.isRecording) return;
+
+    final int beforeCount = _lapRecorder.completedLaps.length;
     _lapRecorder.ingest(data);
+
+    if (data.totalLaps <= 0) return;
+
+    final int afterCount = _lapRecorder.completedLaps.length;
+    if (afterCount <= beforeCount) return;
+
+    final CompleteLap justCompleted = _lapRecorder.completedLaps.last;
+    if (justCompleted.lapNumber >= data.totalLaps) {
+      unawaited(stopRecording());
+    }
   }
 }
