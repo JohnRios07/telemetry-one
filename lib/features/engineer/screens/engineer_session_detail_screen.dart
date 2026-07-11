@@ -5,6 +5,7 @@ import '../../../config/theme/app_colors.dart';
 import '../../../config/theme/app_typography.dart';
 import '../../../shared/format_utils.dart';
 import '../../../shared/widgets/panel_card.dart';
+import '../domain/coach_report.dart';
 import '../domain/lap_comparison.dart';
 import '../domain/session_summary.dart';
 import '../providers/engineer_session_providers.dart';
@@ -24,6 +25,9 @@ class EngineerSessionDetailScreen extends ConsumerWidget {
     );
     final AsyncValue<List<EngineerRecommendation>> recommendationsAsync = ref
         .watch(engineerRecommendationsProvider(sessionId));
+    final AsyncValue<CoachReport?> coachReportAsync = ref.watch(
+      engineerCoachReportProvider(sessionId),
+    );
 
     return Scaffold(
       backgroundColor: AppColors.carbonBlack,
@@ -58,6 +62,8 @@ class EngineerSessionDetailScreen extends ConsumerWidget {
                 _RecommendationsSection(
                   recommendationsAsync: recommendationsAsync,
                 ),
+                const SizedBox(height: 16),
+                _CoachSection(coachReportAsync: coachReportAsync),
                 const SizedBox(height: 16),
                 _LapListSection(summary: summary),
               ],
@@ -559,6 +565,254 @@ class _LapListSection extends StatelessWidget {
               })
               .toList(growable: false),
         ),
+      ),
+    );
+  }
+}
+
+class _CoachSection extends StatelessWidget {
+  final AsyncValue<CoachReport?> coachReportAsync;
+
+  const _CoachSection({required this.coachReportAsync});
+
+  @override
+  Widget build(BuildContext context) {
+    return PanelCard(
+      padding: const EdgeInsets.all(16),
+      child: coachReportAsync.when(
+        data: (CoachReport? report) {
+          if (report == null) {
+            return const _SectionBody(
+              title: 'Coach V1',
+              subtitle: 'No pudimos abrir el coaching local de esta sesión.',
+              child: SizedBox.shrink(),
+            );
+          }
+
+          return _SectionBody(
+            title: 'Coach V1',
+            subtitle: report.disclaimer,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _CoachScoreCard(score: report.driverScore),
+                const SizedBox(height: 14),
+                _WeakSegmentsCard(analysis: report.weakSegments),
+              ],
+            ),
+          );
+        },
+        loading: () => const _SectionBody(
+          title: 'Coach V1',
+          subtitle: 'Armando coaching local con heurísticas de sesión…',
+          child: SizedBox.shrink(),
+        ),
+        error: (Object error, StackTrace stackTrace) {
+          return _SectionBody(
+            title: 'Coach V1',
+            subtitle: 'No se pudo calcular el coaching local: $error',
+            child: const SizedBox.shrink(),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CoachScoreCard extends StatelessWidget {
+  final DriverScoreResult score;
+
+  const _CoachScoreCard({required this.score});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.darkSurface,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'SESSION SCORE',
+            style: AppTypography.inter(
+              size: 10,
+              color: AppColors.neonCyan,
+              weight: FontWeight.w700,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            score.isAvailable ? '${score.overallScore}' : 'N/D',
+            style: AppTypography.orbitron(
+              size: 32,
+              weight: FontWeight.w700,
+              color: score.isAvailable
+                  ? AppColors.textPrimary
+                  : AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            score.isAvailable
+                ? score.explanation
+                : (score.unavailableReason ?? 'Score no disponible.'),
+            style: AppTypography.inter(
+              size: 12,
+              color: AppColors.textSecondary,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: <Widget>[
+              _ComparisonChip(
+                label: 'Pace',
+                value: score.isAvailable ? '${score.paceScore}' : 'N/D',
+              ),
+              _ComparisonChip(
+                label: 'Consistency',
+                value: score.isAvailable ? '${score.consistencyScore}' : 'N/D',
+              ),
+              _ComparisonChip(
+                label: 'Control',
+                value: score.isAvailable ? '${score.controlScore}' : 'N/D',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeakSegmentsCard extends StatelessWidget {
+  final WeakSegmentAnalysis analysis;
+
+  const _WeakSegmentsCard({required this.analysis});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!analysis.isAvailable || analysis.segments.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.darkSurface,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          analysis.unavailableReason ??
+              'No hay suficientes vueltas comparables para cerrar coaching local.',
+          style: AppTypography.inter(
+            size: 12,
+            color: AppColors.textSecondary,
+            height: 1.35,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          'Weak segments',
+          style: AppTypography.inter(
+            size: 12,
+            color: AppColors.textPrimary,
+            weight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 10),
+        ...analysis.segments.map((WeakSegmentInsight segment) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _WeakSegmentTile(segment: segment),
+          );
+        }),
+      ],
+    );
+  }
+}
+
+class _WeakSegmentTile extends StatelessWidget {
+  final WeakSegmentInsight segment;
+
+  const _WeakSegmentTile({required this.segment});
+
+  @override
+  Widget build(BuildContext context) {
+    final List<String> secondarySignals = <String>[];
+    if (segment.medianApexSpeedLossKmh >= 1) {
+      secondarySignals.add(
+        'Apex -${segment.medianApexSpeedLossKmh.toStringAsFixed(1)} km/h',
+      );
+    }
+    if (segment.medianThrottlePickupDelay != null) {
+      secondarySignals.add(
+        'Gas ${formatSignedDuration(segment.medianThrottlePickupDelay!)}',
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.darkSurface,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  segment.label,
+                  style: AppTypography.orbitron(
+                    size: 14,
+                    weight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              Text(
+                formatSignedDuration(segment.medianTimeLoss),
+                style: AppTypography.orbitron(
+                  size: 14,
+                  weight: FontWeight.w600,
+                  color: AppColors.telemetryOrange,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            segment.coachingCue,
+            style: AppTypography.inter(
+              size: 12,
+              color: AppColors.textSecondary,
+              height: 1.35,
+            ),
+          ),
+          if (secondarySignals.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 8),
+            Text(
+              secondarySignals.join(' · '),
+              style: AppTypography.inter(
+                size: 11,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

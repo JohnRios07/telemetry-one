@@ -2,9 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/storage/session_model.dart';
 import '../../../core/storage/session_repository.dart';
+import '../analytics/coach_analyzer.dart';
 import '../analytics/lap_alignment.dart';
 import '../analytics/recommendation_engine.dart';
 import '../analytics/session_analyzer.dart';
+import '../domain/coach_report.dart';
 import '../domain/lap_comparison.dart';
 import '../domain/session_summary.dart';
 
@@ -74,4 +76,16 @@ final engineerRecommendationsProvider =
       }
 
       return RecommendationEngine.build(session);
+    });
+
+final engineerCoachReportProvider =
+    FutureProvider.family<CoachReport?, String>((ref, String sessionId) async {
+      final Session? session = await ref.watch(
+        engineerSessionProvider(sessionId).future,
+      );
+      if (session == null) {
+        return null;
+      }
+
+      return CoachAnalyzer.build(session);
     });
