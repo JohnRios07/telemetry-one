@@ -8,11 +8,26 @@ import '../domain/session_summary.dart';
 import '../providers/engineer_session_providers.dart';
 import 'engineer_session_detail_screen.dart';
 
-class EngineerSessionsScreen extends ConsumerWidget {
+class EngineerSessionsScreen extends ConsumerStatefulWidget {
   const EngineerSessionsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<EngineerSessionsScreen> createState() =>
+      _EngineerSessionsScreenState();
+}
+
+class _EngineerSessionsScreenState
+    extends ConsumerState<EngineerSessionsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.invalidate(engineerSessionsProvider);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final AsyncValue<List<EngineerSessionListItem>> sessionsAsync = ref.watch(
       engineerSessionsProvider,
     );
@@ -221,7 +236,7 @@ class _SessionChip extends StatelessWidget {
             label.toUpperCase(),
             style: AppTypography.inter(
               size: 10,
-              color: AppColors.textDim,
+              color: AppColors.textSecondary,
               letterSpacing: 1.2,
             ),
           ),
@@ -257,6 +272,6 @@ String _formatDuration(Duration? value) {
   final int totalMilliseconds = value.inMilliseconds.abs();
   final int minutes = totalMilliseconds ~/ 60000;
   final int seconds = (totalMilliseconds % 60000) ~/ 1000;
-  final int centiseconds = (totalMilliseconds % 1000) ~/ 10;
-  return '$minutes:${seconds.toString().padLeft(2, '0')}.${centiseconds.toString().padLeft(2, '0')}';
+  final int milliseconds = totalMilliseconds % 1000;
+  return '$minutes:${seconds.toString().padLeft(2, '0')}.${milliseconds.toString().padLeft(3, '0')}';
 }

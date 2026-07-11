@@ -113,7 +113,7 @@ class LapAlignment {
       alignmentMode: alignmentMode,
       confidence: confidence,
       coverageRatio: coverageRatio,
-      label: 'Comparación básica V1',
+      label: 'Best lap vs Last lap',
       detail: useProgressAlignment
           ? 'Alineación por progreso normalizado con cobertura parcial de puntos.'
           : 'Fallback por índice de puntos. Úsalo como referencia básica, no de precisión por curva.',

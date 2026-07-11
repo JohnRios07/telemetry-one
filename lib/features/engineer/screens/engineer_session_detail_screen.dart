@@ -207,7 +207,7 @@ class _MetricCard extends StatelessWidget {
             title.toUpperCase(),
             style: AppTypography.inter(
               size: 10,
-              color: AppColors.textDim,
+              color: AppColors.textSecondary,
               weight: FontWeight.w600,
               letterSpacing: 1.2,
             ),
@@ -278,7 +278,7 @@ class _ComparisonSection extends StatelessWidget {
                       value: _formatSignedDuration(summary.lapTimeDelta),
                     ),
                     _ComparisonChip(
-                      label: 'Avg speed Δ',
+                      label: 'Last vs Best speed',
                       value:
                           '${summary.averageSpeedDeltaKmh.toStringAsFixed(1)} km/h',
                     ),
@@ -355,7 +355,7 @@ class _ComparisonChip extends StatelessWidget {
             label.toUpperCase(),
             style: AppTypography.inter(
               size: 10,
-              color: AppColors.textDim,
+              color: AppColors.neonCyan,
               letterSpacing: 1.2,
             ),
           ),
@@ -785,8 +785,8 @@ String _formatDuration(Duration? value) {
   final int totalMilliseconds = value.inMilliseconds.abs();
   final int minutes = totalMilliseconds ~/ 60000;
   final int seconds = (totalMilliseconds % 60000) ~/ 1000;
-  final int centiseconds = (totalMilliseconds % 1000) ~/ 10;
-  return '$minutes:${seconds.toString().padLeft(2, '0')}.${centiseconds.toString().padLeft(2, '0')}';
+  final int milliseconds = totalMilliseconds % 1000;
+  return '$minutes:${seconds.toString().padLeft(2, '0')}.${milliseconds.toString().padLeft(3, '0')}';
 }
 
 String _formatSignedDuration(Duration value) {
