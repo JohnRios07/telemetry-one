@@ -41,6 +41,7 @@ class Gt7Constants {
   static const int offsetTotalLaps = 0x76; // int16
   static const int offsetBestLap = 0x78; // int32 (ms)
   static const int offsetLastLap = 0x7C; // int32 (ms)
+  static const int offsetSteeringAngle = 0x80; // float32 (-1.0..1.0, positive = right)
   static const int offsetCurrentPosition = 0x84; // int16
   static const int offsetRpmRevWarning = 0x88; // uint16
   static const int offsetRpmRevLimiter = 0x8A; // uint16

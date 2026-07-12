@@ -35,6 +35,9 @@ class TelemetryData {
   final double posY;
   final double posZ;
 
+  // Level 4 — Chassis
+  final double steeringAngle; // -1.0 (left) to 1.0 (right), 0.0 = center
+
   // Engine limits
   final double rpmRevWarning;
   final double rpmRevLimiter;
@@ -63,6 +66,7 @@ class TelemetryData {
     this.posX = 0,
     this.posY = 0,
     this.posZ = 0,
+    this.steeringAngle = 0,
     this.rpmRevWarning = 0,
     this.rpmRevLimiter = 0,
   });

@@ -22,6 +22,7 @@ class Gt7Packet {
   final int bestLapMs;
   final int lastLapMs;
   final int currentLapTimeMs;
+  final double steeringAngle;
   final int currentPosition;
   final int rpmRevWarning;
   final int rpmRevLimiter;
@@ -47,6 +48,7 @@ class Gt7Packet {
     required this.bestLapMs,
     required this.lastLapMs,
     required this.currentLapTimeMs,
+    required this.steeringAngle,
     required this.currentPosition,
     required this.rpmRevWarning,
     required this.rpmRevLimiter,
@@ -101,6 +103,8 @@ class Gt7Packet {
       lastLapMs: buf.getInt32(Gt7Constants.offsetLastLap, Endian.little),
       currentLapTimeMs:
           buf.getInt32(Gt7Constants.offsetCurrentLapTime, Endian.little),
+      steeringAngle:
+          buf.getFloat32(Gt7Constants.offsetSteeringAngle, Endian.little),
       currentPosition:
           buf.getInt16(Gt7Constants.offsetCurrentPosition, Endian.little),
       rpmRevWarning:
