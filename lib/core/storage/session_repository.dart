@@ -1,5 +1,7 @@
 import 'dart:convert';
+
 import 'package:hive_flutter/hive_flutter.dart';
+
 import 'session_model.dart';
 
 /// Repository for persisting and retrieving telemetry sessions via Hive.
@@ -32,6 +34,27 @@ class SessionRepository {
     return sessions;
   }
 
+  /// Retrieve a single saved session by ID.
+  Future<Session?> getSessionById(String id) async {
+    final String? json = _box.get(id) as String?;
+    if (json == null) {
+      return null;
+    }
+
+    return _parseSession(json);
+  }
+
+  /// Retrieve GT7 sessions that contain at least one usable complete lap.
+  Future<List<Session>> getEngineerSessions() async {
+    final List<Session> sessions = await getSessions();
+    return sessions.where(isEngineerSession).toList(growable: false);
+  }
+
+  bool isEngineerSession(Session session) {
+    return session.game.toUpperCase() == 'GT7' &&
+        session.laps.any((lap) => lap.isValidForEngineer);
+  }
+
   /// Delete a session by ID.
   Future<void> deleteSession(String id) async {
     await _box.delete(id);
@@ -48,8 +71,15 @@ class SessionRepository {
             : null,
         game: map['game'] as String? ?? 'GT7',
         ps5Ip: map['ps5_ip'] as String?,
-        points: (map['points'] as List?)
+        trackName: map['track_name'] as String?,
+        points:
+            (map['points'] as List?)
                 ?.map((p) => _parsePoint(p as Map<String, dynamic>))
+                .toList() ??
+            [],
+        laps:
+            (map['laps'] as List?)
+                ?.map((lap) => _parseLap(lap as Map<String, dynamic>))
                 .toList() ??
             [],
       );
@@ -61,11 +91,49 @@ class SessionRepository {
   TelemetryPoint _parsePoint(Map<String, dynamic> map) {
     return TelemetryPoint(
       timestamp: DateTime.parse(map['timestamp'] as String),
+      packetId: map['packet_id'] as int?,
+      currentLap: map['current_lap'] as int?,
+      currentLapTime: _parseDuration(map['current_lap_time_ms']),
       speedKmh: (map['speed_kmh'] as num).toDouble(),
       rpm: (map['rpm'] as num).toDouble(),
       gear: map['gear'] as int,
       throttle: (map['throttle'] as num).toDouble(),
       brake: (map['brake'] as num).toDouble(),
+      clutch: (map['clutch'] as num?)?.toDouble(),
+      fuelCurrentL: (map['fuel_current_l'] as num?)?.toDouble(),
+      fuelCapacityL: (map['fuel_capacity_l'] as num?)?.toDouble(),
+      tireTemps: (map['tire_temps'] as List?)
+          ?.map((temp) => (temp as num).toDouble())
+          .toList(),
+      posX: (map['pos_x'] as num?)?.toDouble(),
+      posY: (map['pos_y'] as num?)?.toDouble(),
+      posZ: (map['pos_z'] as num?)?.toDouble(),
     );
+  }
+
+  CompleteLap _parseLap(Map<String, dynamic> map) {
+    return CompleteLap(
+      id: map['id'] as String,
+      lapNumber: map['lap_number'] as int,
+      startTime: DateTime.parse(map['start_time'] as String),
+      endTime: DateTime.parse(map['end_time'] as String),
+      officialLapTime: _parseDuration(map['official_lap_time_ms'])!,
+      bestLapTimeAtCompletion: _parseDuration(
+        map['best_lap_time_at_completion_ms'],
+      ),
+      position: map['position'] as int?,
+      isOutLap: map['is_out_lap'] as bool?,
+      isPitLap: map['is_pit_lap'] as bool?,
+      points:
+          (map['points'] as List?)
+              ?.map((p) => _parsePoint(p as Map<String, dynamic>))
+              .toList() ??
+          [],
+    );
+  }
+
+  Duration? _parseDuration(dynamic milliseconds) {
+    if (milliseconds == null) return null;
+    return Duration(milliseconds: (milliseconds as num).round());
   }
 }

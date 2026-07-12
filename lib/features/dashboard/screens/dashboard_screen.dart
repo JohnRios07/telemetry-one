@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/telemetry_data.dart';
 import '../../../../config/theme/app_colors.dart';
 import '../../../../config/theme/app_typography.dart';
+import '../providers/session_provider.dart';
 import '../providers/telemetry_provider.dart';
 import '../widgets/header_bar.dart';
 import '../widgets/telemetry_graph.dart';
@@ -35,6 +36,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         if (data == null) return;
         ref.read(telemetryBufferProvider.notifier).add(data.throttle, data.brake);
         ref.read(trackHistoryProvider.notifier).ingest(data);
+        ref.read(sessionRecorderProvider.notifier).recordPoint(data);
       },
       fireImmediately: true,
     );
