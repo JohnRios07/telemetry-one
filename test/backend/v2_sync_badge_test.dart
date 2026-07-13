@@ -168,6 +168,38 @@ void main() {
       expect(find.text('SYNC'), findsOneWidget);
     });
 
+    testWidgets('shows rejection code when rejected frames exist',
+        (tester) async {
+      final syncState = BackendSyncState(
+        sessionId: 'local_test',
+        status: SyncStatus.idle,
+        totalSent: 10,
+        totalAccepted: 8,
+        totalRejected: 2,
+        lastRejectionCode: 'invalid_throttle',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            backendConfigProvider.overrideWithValue(
+              const BackendConfig(useV2Data: true),
+            ),
+            backendSyncProvider.overrideWith(
+              (ref) => _MockSyncNotifier(syncState),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: V2SyncBadge()),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('R:2'), findsOneWidget);
+      expect(find.textContaining('invalid_throttle'), findsOneWidget);
+      expect(find.textContaining('P:0'), findsOneWidget);
+    });
+
     testWidgets('shows backend session ID when aligned', (tester) async {
       final syncState = BackendSyncState(
         sessionId: 'local_ignore',

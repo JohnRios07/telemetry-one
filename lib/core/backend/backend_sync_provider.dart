@@ -37,6 +37,7 @@ class BackendSyncState {
   final int totalRejected;
   final int consecutiveFailures;
   final IngestRejection? lastRejection;
+  final String? lastRejectionCode;
   final String? lastErrorMessage;
   final DateTime? lastSyncAt;
   final DateTime? lastErrorAt;
@@ -58,6 +59,7 @@ class BackendSyncState {
     this.totalRejected = 0,
     this.consecutiveFailures = 0,
     this.lastRejection,
+    this.lastRejectionCode,
     this.lastErrorMessage,
     this.lastSyncAt,
     this.lastErrorAt,
@@ -81,6 +83,7 @@ class BackendSyncState {
     int? totalRejected,
     int? consecutiveFailures,
     Object? lastRejection = _unset,
+    Object? lastRejectionCode = _unset,
     String? lastErrorMessage,
     bool clearError = false,
     DateTime? lastSyncAt,
@@ -100,6 +103,9 @@ class BackendSyncState {
       lastRejection: lastRejection == _unset
           ? this.lastRejection
           : lastRejection as IngestRejection?,
+      lastRejectionCode: lastRejectionCode == _unset
+          ? this.lastRejectionCode
+          : lastRejectionCode as String?,
       lastErrorMessage: clearError
           ? null
           : (lastErrorMessage ?? this.lastErrorMessage),
@@ -224,6 +230,7 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
           pendingFrames: enabled ? null : 0,
           consecutiveFailures: enabled ? 0 : null,
           lastRejection: null,
+          lastRejectionCode: null,
           clearError: enabled,
           backendSessionId: enabled ? state.backendSessionId : null,
           alignmentStatus: enabled ? state.alignmentStatus : SessionAlignmentStatus.none,
@@ -370,6 +377,7 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
         totalRejected: state.totalRejected + response.rejectedFrames,
         consecutiveFailures: 0,
         lastRejection: null,
+        lastRejectionCode: response.topRejectionCode,
         lastErrorMessage: null,
         lastSyncAt: now,
         clearError: true,
@@ -378,7 +386,8 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
       debugPrint(
         '[BackendSync] Flushed ${frames.length} frames — '
         'accepted: ${response.acceptedFrames}, '
-        'rejected: ${response.rejectedFrames}',
+        'rejected: ${response.rejectedFrames}'
+        '${response.hasRejections ? ', top: ${response.topRejectionCode}' : ''}',
       );
     } on BackendRequestException catch (e) {
       final now = DateTime.now();

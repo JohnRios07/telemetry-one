@@ -43,6 +43,56 @@ void main() {
       expect(response.acceptedFrames, 49);
       expect(response.rejectedFrames, 1);
       expect(response.isAccepted, isFalse);
+      expect(response.rejectionSummary, isNull);
+      expect(response.topRejectionCode, isNull);
+    });
+
+    test('parses response with rejection summary', () {
+      final json = {
+        'sessionId': 'session_01j2example',
+        'receivedFrames': 50,
+        'acceptedFrames': 48,
+        'rejectedFrames': 2,
+        'acceptedFromUnixMs': 1720656000100,
+        'acceptedToUnixMs': 1720656000500,
+        'status': 'partial',
+        'rejectionSummary': {
+          'reasons': [
+            {'code': 'invalid_throttle', 'count': 1},
+            {'code': 'invalid_speed', 'count': 1},
+          ],
+        },
+      };
+
+      final response = IngestResponse.fromJson(json);
+
+      expect(response.rejectedFrames, 2);
+      expect(response.hasRejections, isTrue);
+      expect(response.topRejectionCode, 'invalid_throttle');
+      expect(response.rejectionSummary!.reasons.length, 2);
+      expect(response.rejectionSummary!.reasons[0].code, 'invalid_throttle');
+      expect(response.rejectionSummary!.reasons[0].count, 1);
+      expect(response.rejectionSummary!.reasons[1].code, 'invalid_speed');
+      expect(response.rejectionSummary!.reasons[1].count, 1);
+    });
+
+    test('parses response with empty rejection summary gracefully', () {
+      final json = {
+        'sessionId': 'session_01j2example',
+        'receivedFrames': 10,
+        'acceptedFrames': 10,
+        'rejectedFrames': 0,
+        'acceptedFromUnixMs': 1720656000100,
+        'acceptedToUnixMs': 1720656000200,
+        'status': 'accepted',
+        'rejectionSummary': null,
+      };
+
+      final response = IngestResponse.fromJson(json);
+
+      expect(response.rejectionSummary, isNull);
+      expect(response.topRejectionCode, isNull);
+      expect(response.hasRejections, isFalse);
     });
   });
 
