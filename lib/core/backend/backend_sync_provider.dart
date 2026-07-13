@@ -444,8 +444,26 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
   }
 }
 
+/// Reads backend config from `--dart-define` environment overrides.
+///
+/// Supported defines:
+/// - `backend_base_url` — overrides [BackendConfig.baseUrl]
+/// - `use_v2_data` — `"true"` enables V2 data mode (default: `false`)
+///
+/// When a define is not provided, the default from [BackendConfig] is used.
+/// This ensures production safety: no hardcoded testing URL leaks.
+@visibleForTesting
+BackendConfig createBackendConfigFromEnv() {
+  const envBaseUrl = String.fromEnvironment('backend_base_url');
+  const envUseV2Data = String.fromEnvironment('use_v2_data');
+  return BackendConfig(
+    baseUrl: envBaseUrl.isNotEmpty ? envBaseUrl : BackendConfig().baseUrl,
+    useV2Data: envUseV2Data == 'true',
+  );
+}
+
 final backendConfigProvider = Provider<BackendConfig>((ref) {
-  return const BackendConfig();
+  return createBackendConfigFromEnv();
 });
 
 final backendClientProvider = Provider<BackendClient>((ref) {
