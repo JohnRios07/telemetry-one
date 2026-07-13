@@ -233,7 +233,6 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
           game: 'gt7',
           platform: 'ps5',
           driverAlias: _config.driverAlias,
-          trackId: '',
           startedUnixMs: DateTime.now().millisecondsSinceEpoch,
         ),
       );
@@ -262,6 +261,12 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
       debugPrint(
         '[BackendSync] Session creation unexpected error (continuing with local ID): $e',
       );
+    } finally {
+      if (state.alignmentStatus == SessionAlignmentStatus.pending) {
+        state = state.copyWith(
+          alignmentStatus: SessionAlignmentStatus.failed,
+        );
+      }
     }
   }
 

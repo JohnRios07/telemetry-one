@@ -1033,6 +1033,62 @@ void main() {
       });
     });
 
+    group('V2 enabled — Dart Error during creation', () {
+      test('Error does not leave alignmentStatus stuck at pending', () async {
+        final client = _SessionCreateErrorMockClient();
+        final config = BackendConfig(
+          useV2Data: true,
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+
+        try {
+          await notifier.setEnabled(true);
+          fail('Expected Error to propagate');
+        } catch (_) {
+          // Error propagated — alignmentStatus should have been reset
+        }
+
+        expect(
+          notifier.state.alignmentStatus,
+          SessionAlignmentStatus.failed,
+          reason: 'finally block reset pending to failed before Error propagation',
+        );
+
+        // Guard: not stuck at pending — subsequent retry should work
+        expect(client.createCallCount, 1);
+      });
+
+      test('retry after Error still creates session', () async {
+        final config = BackendConfig(
+          useV2Data: true,
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+
+        final client = _SessionCreateMockClient();
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        await notifier.setEnabled(true);
+        expect(client.createCallCount, 1);
+        expect(notifier.state.alignmentStatus, SessionAlignmentStatus.created);
+        expect(notifier.state.backendSessionId, 'session_backend_test_1');
+      });
+    });
+
     group('V2 enabled — finish failure non-fatal', () {
       test('finish failure does not prevent state transition', () async {
         final client = _SessionCreateFinishFailMockClient();
@@ -1348,6 +1404,20 @@ class _ControllableCreateMockClient extends BackendClient {
       acceptedToUnixMs: 100,
       status: 'accepted',
     );
+  }
+}
+
+class _SessionCreateErrorMockClient extends BackendClient {
+  int createCallCount = 0;
+
+  _SessionCreateErrorMockClient({BackendConfig? config}) : super(config: config);
+
+  @override
+  Future<CreateSessionResponse> createSession(
+    CreateSessionRequest request,
+  ) async {
+    createCallCount++;
+    throw Error(); // Dart Error — not caught by on Exception
   }
 }
 

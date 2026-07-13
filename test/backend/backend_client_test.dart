@@ -6,6 +6,62 @@ import 'package:telemetry_one/core/backend/backend_config.dart';
 import 'package:telemetry_one/core/backend/telemetry_frame_dto.dart';
 
 void main() {
+  group('CreateSessionRequest toJson', () {
+    test('omits trackId when null', () {
+      final request = CreateSessionRequest(
+        source: 'flutter',
+        game: 'gt7',
+        platform: 'ps5',
+        driverAlias: 'alex',
+        startedUnixMs: 1720656000000,
+      );
+      final json = request.toJson();
+      expect(json.containsKey('trackId'), isFalse);
+    });
+
+    test('includes trackId when non-empty', () {
+      final request = CreateSessionRequest(
+        source: 'flutter',
+        game: 'gt7',
+        platform: 'ps5',
+        driverAlias: 'alex',
+        trackId: 'gt7_watkins_glen_international',
+        startedUnixMs: 1720656000000,
+      );
+      final json = request.toJson();
+      expect(json['trackId'], 'gt7_watkins_glen_international');
+    });
+
+    test('omits trackId when empty string', () {
+      final request = CreateSessionRequest(
+        source: 'flutter',
+        game: 'gt7',
+        platform: 'ps5',
+        driverAlias: 'alex',
+        trackId: '',
+        startedUnixMs: 1720656000000,
+      );
+      final json = request.toJson();
+      expect(json.containsKey('trackId'), isFalse);
+    });
+
+    test('always includes required fields', () {
+      final request = CreateSessionRequest(
+        source: 'flutter',
+        game: 'gt7',
+        platform: 'ps5',
+        driverAlias: 'alex',
+        startedUnixMs: 1720656000000,
+      );
+      final json = request.toJson();
+      expect(json['source'], 'flutter');
+      expect(json['game'], 'gt7');
+      expect(json['platform'], 'ps5');
+      expect(json['driverAlias'], 'alex');
+      expect(json['startedUnixMs'], 1720656000000);
+    });
+  });
+
   group('BackendClient', () {
     late HttpServer _server;
     late int _port;
@@ -287,7 +343,6 @@ void main() {
             game: 'gt7',
             platform: 'ps5',
             driverAlias: 'alex',
-            trackId: '',
             startedUnixMs: 1720656000000,
           ),
         );
@@ -314,7 +369,6 @@ void main() {
           game: 'gt7',
           platform: 'ps5',
           driverAlias: 'alex',
-          trackId: '',
           startedUnixMs: 1720656000000,
         ));
         fail('Expected BackendRequestException');

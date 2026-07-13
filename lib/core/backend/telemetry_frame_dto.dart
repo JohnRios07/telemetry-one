@@ -244,7 +244,7 @@ class CreateSessionRequest {
   final String game;
   final String platform;
   final String driverAlias;
-  final String trackId;
+  final String? trackId;
   final int startedUnixMs;
 
   const CreateSessionRequest({
@@ -252,18 +252,23 @@ class CreateSessionRequest {
     required this.game,
     required this.platform,
     required this.driverAlias,
-    required this.trackId,
+    this.trackId,
     required this.startedUnixMs,
   });
 
-  Map<String, dynamic> toJson() => {
-    'source': source,
-    'game': game,
-    'platform': platform,
-    'driverAlias': driverAlias,
-    'trackId': trackId,
-    'startedUnixMs': startedUnixMs,
-  };
+  Map<String, dynamic> toJson() {
+    final json = <String, dynamic>{
+      'source': source,
+      'game': game,
+      'platform': platform,
+      'driverAlias': driverAlias,
+      'startedUnixMs': startedUnixMs,
+    };
+    if (trackId != null && trackId!.isNotEmpty) {
+      json['trackId'] = trackId;
+    }
+    return json;
+  }
 }
 
 class CreateSessionResponse {
