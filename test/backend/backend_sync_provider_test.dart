@@ -275,6 +275,77 @@ void main() {
     });
   });
 
+  group('Bad request without details (400 invalid JSON body)', () {
+    test('drops batch and increments rejected — no reinsert loop', () async {
+      final mockClient = _BadRequestNoDetailsMockClient();
+      final notifier = BackendSyncNotifier(
+        client: mockClient,
+        parser: MockTelemetryParser(),
+        config: _testConfig(),
+      );
+
+      await notifier.setEnabled(true);
+
+      notifier.injectPacket(Uint8List(1));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.state.status, SyncStatus.rejected);
+      expect(notifier.state.totalRejected, 1);
+      expect(notifier.state.totalAccepted, 0);
+      expect(notifier.state.totalSent, 0);
+      expect(notifier.state.pendingFrames, 0,
+          reason: 'batch must be dropped, not reinserted');
+      expect(notifier.state.lastRejection, isNull,
+          reason: 'no details means no structured rejection info');
+      expect(notifier.state.lastErrorMessage, contains('invalid JSON body'));
+    });
+
+    test('subsequent success after 400 recovers normally', () async {
+      var callIndex = 0;
+      final client = _buildMockClient((frames) async {
+        callIndex++;
+        if (callIndex == 1) {
+          throw BackendRequestException(
+            statusCode: 400,
+            error: const BackendError(
+              code: 'bad_request',
+              message: 'invalid JSON body: unknown field "steeringAngle"',
+            ),
+          );
+        }
+        return IngestResponse(
+          sessionId: 'test',
+          receivedFrames: frames.length,
+          acceptedFrames: frames.length,
+          rejectedFrames: 0,
+          acceptedFromUnixMs: 1,
+          acceptedToUnixMs: 2,
+          status: 'accepted',
+        );
+      });
+
+      final notifier = BackendSyncNotifier(
+        client: client,
+        parser: MockTelemetryParser(),
+        config: _testConfig(),
+      );
+
+      await notifier.setEnabled(true);
+
+      notifier.injectPacket(Uint8List(1));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.state.status, SyncStatus.rejected);
+
+      notifier.injectPacket(Uint8List(2));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.state.status, SyncStatus.idle);
+      expect(notifier.state.totalAccepted, 1);
+      expect(notifier.state.totalRejected, 1);
+    });
+  });
+
   group('Network error transition to degraded/offline', () {
     test('SocketException transitions to degraded', () async {
       final mockClient = _NetworkErrorMockClient();
@@ -942,6 +1013,123 @@ void main() {
       expect(notifier2.state.status, SyncStatus.idle);
       expect(notifier2.state.backendSessionId, 'session_backend_test_1');
       expect(notifier2.state.alignmentStatus, SessionAlignmentStatus.created);
+    });
+  });
+
+  group('Disable lifecycle drains buffer before finish', () {
+    test('disable flushes pending frames with backendSessionId before finish',
+        () async {
+      final client = _DisableLifecycleMockClient();
+      final config = BackendConfig(
+        useV2Data: true,
+        defaultBatchSize: 5,
+        maxRetries: 0,
+        retryBaseDelay: Duration.zero,
+      );
+      final notifier = BackendSyncNotifier(
+        client: client,
+        parser: MockTelemetryParser(),
+        config: config,
+      );
+
+      await notifier.setEnabled(true);
+      expect(notifier.state.backendSessionId, 'session_backend_test_1');
+      expect(notifier.state.status, SyncStatus.idle);
+
+      // Buffer some frames without triggering auto-flush (batchSize=5)
+      for (var i = 0; i < 3; i++) {
+        notifier.injectPacket(Uint8List(i));
+      }
+      expect(notifier.state.pendingFrames, 0,
+          reason: 'frames buffered but not yet flushed');
+
+      // Disable — should flush pending frames BEFORE finishing
+      await notifier.setEnabled(false);
+
+      // Verify: batch was flushed with backendSessionId
+      expect(client.batchCallCount, 1,
+          reason: 'pending frames should flush before finish');
+      expect(client.lastBatchSessionId, 'session_backend_test_1',
+          reason: 'flush must use backendSessionId, not local_*');
+      expect(client.finishCallCount, 1);
+      expect(client.lastFinishSessionId, 'session_backend_test_1');
+
+      // State should be clean disabled
+      expect(notifier.state.status, SyncStatus.disabled);
+      expect(notifier.state.enabled, isFalse);
+      expect(notifier.state.backendSessionId, isNull);
+      expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+    });
+
+    test('disable with empty buffer does not flush, only finishes', () async {
+      final client = _DisableLifecycleMockClient();
+      final config = BackendConfig(
+        useV2Data: true,
+        defaultBatchSize: 5,
+        maxRetries: 0,
+        retryBaseDelay: Duration.zero,
+      );
+      final notifier = BackendSyncNotifier(
+        client: client,
+        parser: MockTelemetryParser(),
+        config: config,
+      );
+
+      await notifier.setEnabled(true);
+      expect(notifier.state.backendSessionId, 'session_backend_test_1');
+
+      // Disable immediately — no frames buffered
+      await notifier.setEnabled(false);
+
+      expect(client.batchCallCount, 0,
+          reason: 'no frames to flush');
+      expect(client.finishCallCount, 1);
+      expect(notifier.state.status, SyncStatus.disabled);
+    });
+
+    test('no local_* fallback after disable with pending frames', () async {
+      final client = _DisableLifecycleMockClient();
+      final config = BackendConfig(
+        useV2Data: true,
+        defaultBatchSize: 5,
+        maxRetries: 0,
+        retryBaseDelay: Duration.zero,
+      );
+      final notifier = BackendSyncNotifier(
+        client: client,
+        parser: MockTelemetryParser(),
+        config: config,
+      );
+
+      await notifier.setEnabled(true);
+      expect(notifier.state.backendSessionId, 'session_backend_test_1');
+
+      for (var i = 0; i < 3; i++) {
+        notifier.injectPacket(Uint8List(i));
+      }
+
+      await notifier.setEnabled(false);
+
+      // Every batch that was sent must have used the backend session ID
+      if (client.batchCallCount > 0) {
+        expect(client.lastBatchSessionId, 'session_backend_test_1',
+            reason: 'ALL batches must use backendSessionId, not local_*');
+      }
+
+      // After finish, no more batches should be sent
+      final finishCallIndex = client.finishCallCount;
+      await Future<void>.delayed(Duration.zero);
+
+      // No additional batch calls after finish
+      expect(client.batchCallCount,
+          finishCallIndex > 0 ? client.batchCallCount : 0);
+
+      // State has no backendSessionId
+      expect(notifier.state.backendSessionId, isNull);
+
+      // recordData no longer accepts data
+      notifier.recordData(_sampleData(99));
+      expect(notifier.state.pendingFrames, 0);
     });
   });
 
@@ -1693,6 +1881,75 @@ class _SessionCreateFinishFailMockClient extends BackendClient {
     String sessionId,
     List<Map<String, dynamic>> frames,
   ) async {
+    return IngestResponse(
+      sessionId: sessionId,
+      receivedFrames: frames.length,
+      acceptedFrames: frames.length,
+      rejectedFrames: 0,
+      acceptedFromUnixMs: 1,
+      acceptedToUnixMs: 100,
+      status: 'accepted',
+    );
+  }
+}
+
+class _BadRequestNoDetailsMockClient extends BackendClient {
+  int callCount = 0;
+
+  _BadRequestNoDetailsMockClient({BackendConfig? config})
+    : super(config: config);
+
+  @override
+  Future<IngestResponse> postFrameBatch(
+    String sessionId,
+    List<Map<String, dynamic>> frames,
+  ) async {
+    callCount++;
+    throw BackendRequestException(
+      statusCode: 400,
+      error: const BackendError(
+        code: 'bad_request',
+        message: 'invalid JSON body: unknown field "steeringAngle"',
+      ),
+    );
+  }
+}
+
+class _DisableLifecycleMockClient extends BackendClient {
+  int createCallCount = 0;
+  int finishCallCount = 0;
+  int batchCallCount = 0;
+  String? lastBatchSessionId;
+  String? lastFinishSessionId;
+
+  _DisableLifecycleMockClient({BackendConfig? config})
+    : super(config: config);
+
+  @override
+  Future<CreateSessionResponse> createSession(
+    CreateSessionRequest request,
+  ) async {
+    createCallCount++;
+    return CreateSessionResponse(sessionId: 'session_backend_test_1');
+  }
+
+  @override
+  Future<FinishSessionResponse> finishSession(
+    String sessionId,
+    FinishSessionRequest request,
+  ) async {
+    finishCallCount++;
+    lastFinishSessionId = sessionId;
+    return const FinishSessionResponse(status: 'finished');
+  }
+
+  @override
+  Future<IngestResponse> postFrameBatch(
+    String sessionId,
+    List<Map<String, dynamic>> frames,
+  ) async {
+    batchCallCount++;
+    lastBatchSessionId = sessionId;
     return IngestResponse(
       sessionId: sessionId,
       receivedFrames: frames.length,

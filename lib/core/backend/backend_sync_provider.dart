@@ -205,6 +205,10 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
           _startFlushTimer();
         }
       } else if (!enabled && state.enabled) {
+        state = state.copyWith(status: SyncStatus.disabled);
+        if (_buffer.isNotEmpty) {
+          await _flush();
+        }
         try {
           await _finishBackendSession();
         } finally {
@@ -345,6 +349,8 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
     frames = mapTelemetryBatch(batch);
     jsonFrames = frames.map((f) => f.toJson()).toList();
 
+    final capturedSessionId = state.effectiveSessionId;
+
     state = state.copyWith(
       status: SyncStatus.syncing,
       pendingFrames: frames.length,
@@ -352,7 +358,7 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
 
     try {
       final response = await _client.postFrameBatch(
-        state.effectiveSessionId,
+        capturedSessionId,
         jsonFrames,
       );
       final now = DateTime.now();
@@ -376,7 +382,7 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
       );
     } on BackendRequestException catch (e) {
       final now = DateTime.now();
-      if (e.error.details != null && e.error.isBadRequest) {
+      if (e.error.isBadRequest) {
         // Typed validation rejection: drop frames, do NOT retry
         state = state.copyWith(
           status: SyncStatus.rejected,
