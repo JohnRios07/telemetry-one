@@ -139,6 +139,75 @@ class BackendClient {
     }
   }
 
+  Future<CreateSessionResponse> createSession(
+    CreateSessionRequest request,
+  ) async {
+    final body = jsonEncode(request.toJson());
+    final uri = Uri.parse('${config.apiBase}/sessions');
+
+    try {
+      final httpRequest = await _client.postUrl(uri);
+      httpRequest.headers.contentType = ContentType.json;
+      httpRequest.write(body);
+      final response = await httpRequest.close();
+      final responseBody = await utf8.decodeStream(response);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return CreateSessionResponse.fromJson(
+          jsonDecode(responseBody) as Map<String, dynamic>,
+        );
+      }
+
+      throw BackendRequestException(
+        statusCode: response.statusCode,
+        error: BackendError.parse(responseBody),
+      );
+    } on SocketException catch (e) {
+      throw BackendRequestException(
+        statusCode: 0,
+        error: BackendError(
+          code: 'network_error',
+          message: 'Connection failed: ${e.message}',
+        ),
+      );
+    }
+  }
+
+  Future<FinishSessionResponse> finishSession(
+    String sessionId,
+    FinishSessionRequest request,
+  ) async {
+    final body = jsonEncode(request.toJson());
+    final uri = Uri.parse('${config.apiBase}/sessions/$sessionId/finish');
+
+    try {
+      final httpRequest = await _client.postUrl(uri);
+      httpRequest.headers.contentType = ContentType.json;
+      httpRequest.write(body);
+      final response = await httpRequest.close();
+      final responseBody = await utf8.decodeStream(response);
+
+      if (response.statusCode == 200) {
+        return FinishSessionResponse.fromJson(
+          jsonDecode(responseBody) as Map<String, dynamic>,
+        );
+      }
+
+      throw BackendRequestException(
+        statusCode: response.statusCode,
+        error: BackendError.parse(responseBody),
+      );
+    } on SocketException catch (e) {
+      throw BackendRequestException(
+        statusCode: 0,
+        error: BackendError(
+          code: 'network_error',
+          message: 'Connection failed: ${e.message}',
+        ),
+      );
+    }
+  }
+
   Future<List<EngineerEvent>> getEvents(
     String sessionId, {
     int? lapNumber,

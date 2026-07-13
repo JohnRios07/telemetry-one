@@ -239,6 +239,68 @@ class TrackDetectionResponse {
   }
 }
 
+class CreateSessionRequest {
+  final String source;
+  final String game;
+  final String platform;
+  final String driverAlias;
+  final String trackId;
+  final int startedUnixMs;
+
+  const CreateSessionRequest({
+    required this.source,
+    required this.game,
+    required this.platform,
+    required this.driverAlias,
+    required this.trackId,
+    required this.startedUnixMs,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'source': source,
+    'game': game,
+    'platform': platform,
+    'driverAlias': driverAlias,
+    'trackId': trackId,
+    'startedUnixMs': startedUnixMs,
+  };
+}
+
+class CreateSessionResponse {
+  final String sessionId;
+
+  const CreateSessionResponse({required this.sessionId});
+
+  factory CreateSessionResponse.fromJson(Map<String, dynamic> json) {
+    final session = json['session'] as Map<String, dynamic>;
+    return CreateSessionResponse(
+      sessionId: session['id'] as String,
+    );
+  }
+}
+
+class FinishSessionRequest {
+  final int endedUnixMs;
+
+  const FinishSessionRequest({required this.endedUnixMs});
+
+  Map<String, dynamic> toJson() => {
+    'endedUnixMs': endedUnixMs,
+  };
+}
+
+class FinishSessionResponse {
+  final String status;
+
+  const FinishSessionResponse({required this.status});
+
+  factory FinishSessionResponse.fromJson(Map<String, dynamic> json) {
+    return FinishSessionResponse(
+      status: json['status'] as String,
+    );
+  }
+}
+
 class EngineerEvent {
   final String eventId;
   final String sessionId;

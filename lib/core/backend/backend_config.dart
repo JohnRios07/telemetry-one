@@ -11,6 +11,10 @@ class BackendConfig {
   /// preserving local V1 as the source of truth.
   final bool useV2Data;
 
+  /// Driver alias sent to backend on session creation.
+  /// Used in V2 session alignment when [useV2Data] is true.
+  final String driverAlias;
+
   const BackendConfig({
     this.baseUrl = 'http://localhost:8080',
     this.requestTimeout = const Duration(seconds: 10),
@@ -19,6 +23,7 @@ class BackendConfig {
     this.maxBatchSize = 600,
     this.defaultBatchSize = 120,
     this.useV2Data = false,
+    this.driverAlias = 'driver',
   });
 
   String get apiBase => '$baseUrl/api/v1';
