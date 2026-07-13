@@ -1090,6 +1090,70 @@ void main() {
     });
 
     group('V2 enabled — finish failure non-fatal', () {
+      test('disconnect cleanup runs even if finish throws Dart Error', () async {
+        final client = _SessionCreateFinishErrorMockClient();
+        final config = BackendConfig(
+          useV2Data: true,
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        await notifier.setEnabled(true);
+        expect(notifier.state.backendSessionId, 'session_backend_test_1');
+        expect(notifier.state.alignmentStatus, SessionAlignmentStatus.created);
+
+        try {
+          await notifier.disconnect();
+          fail('Expected Error to propagate');
+        } catch (_) {
+          // Error propagated after cleanup
+        }
+
+        expect(client.finishCallCount, 1);
+        expect(notifier.state.udpConnected, isFalse);
+        expect(notifier.state.status, SyncStatus.disabled);
+        expect(notifier.state.backendSessionId, isNull);
+        expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+      });
+
+      test('setEnabled(false) cleanup runs even if finish throws Dart Error',
+          () async {
+        final client = _SessionCreateFinishErrorMockClient();
+        final config = BackendConfig(
+          useV2Data: true,
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        await notifier.setEnabled(true);
+        expect(notifier.state.backendSessionId, 'session_backend_test_1');
+
+        try {
+          await notifier.setEnabled(false);
+          fail('Expected Error to propagate');
+        } catch (_) {
+          // Error propagated after cleanup
+        }
+
+        expect(client.finishCallCount, 1);
+        expect(notifier.state.status, SyncStatus.disabled);
+        expect(notifier.state.backendSessionId, isNull);
+        expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+        expect(notifier.state.pendingFrames, 0);
+      });
+
       test('finish failure does not prevent state transition', () async {
         final client = _SessionCreateFinishFailMockClient();
         final config = BackendConfig(
@@ -1418,6 +1482,48 @@ class _SessionCreateErrorMockClient extends BackendClient {
   ) async {
     createCallCount++;
     throw Error(); // Dart Error — not caught by on Exception
+  }
+}
+
+/// Mock that throws a Dart Error on finishSession.
+class _SessionCreateFinishErrorMockClient extends BackendClient {
+  int createCallCount = 0;
+  int finishCallCount = 0;
+
+  _SessionCreateFinishErrorMockClient({BackendConfig? config})
+    : super(config: config);
+
+  @override
+  Future<CreateSessionResponse> createSession(
+    CreateSessionRequest request,
+  ) async {
+    createCallCount++;
+    return CreateSessionResponse(sessionId: 'session_backend_test_1');
+  }
+
+  @override
+  Future<FinishSessionResponse> finishSession(
+    String sessionId,
+    FinishSessionRequest request,
+  ) async {
+    finishCallCount++;
+    throw Error(); // Dart Error — not caught by on Exception
+  }
+
+  @override
+  Future<IngestResponse> postFrameBatch(
+    String sessionId,
+    List<Map<String, dynamic>> frames,
+  ) async {
+    return IngestResponse(
+      sessionId: sessionId,
+      receivedFrames: frames.length,
+      acceptedFrames: frames.length,
+      rejectedFrames: 0,
+      acceptedFromUnixMs: 1,
+      acceptedToUnixMs: 100,
+      status: 'accepted',
+    );
   }
 }
 

@@ -175,43 +175,57 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
   }
 
   Future<void> disconnect() async {
-    await _finishBackendSession();
-    _subscription?.cancel();
-    _subscription = null;
-    _flushTimer?.cancel();
-    _flushTimer = null;
-    state = state.copyWith(
-      udpConnected: false,
-      status: SyncStatus.disabled,
-      backendSessionId: null,
-      alignmentStatus: SessionAlignmentStatus.none,
-    );
+    try {
+      await _finishBackendSession();
+    } finally {
+      _subscription?.cancel();
+      _subscription = null;
+      _flushTimer?.cancel();
+      _flushTimer = null;
+      state = state.copyWith(
+        udpConnected: false,
+        status: SyncStatus.disabled,
+        backendSessionId: null,
+        alignmentStatus: SessionAlignmentStatus.none,
+      );
+    }
   }
 
   Future<void> setEnabled(bool enabled) async {
-    if (enabled && !state.enabled) {
-      await _ensureBackendSession();
-      // Guard: if V2 is enabled and setEnabled(false) was called during the
-      // HTTP gap, alignmentStatus was reset to none — don't start flush timer.
-      if (_config.useV2Data && state.alignmentStatus == SessionAlignmentStatus.none) {
-        return;
+    bool skipStateUpdate = false;
+
+    try {
+      if (enabled && !state.enabled) {
+        await _ensureBackendSession();
+        // Guard: if V2 is enabled and setEnabled(false) was called during the
+        // HTTP gap, alignmentStatus was reset to none — don't start flush timer.
+        if (_config.useV2Data && state.alignmentStatus == SessionAlignmentStatus.none) {
+          skipStateUpdate = true;
+        } else {
+          _startFlushTimer();
+        }
+      } else if (!enabled && state.enabled) {
+        try {
+          await _finishBackendSession();
+        } finally {
+          _flushTimer?.cancel();
+          _flushTimer = null;
+          _buffer.clear();
+        }
       }
-      _startFlushTimer();
-    } else if (!enabled && state.enabled) {
-      await _finishBackendSession();
-      _flushTimer?.cancel();
-      _flushTimer = null;
-      _buffer.clear();
+    } finally {
+      if (!skipStateUpdate) {
+        state = state.copyWith(
+          status: enabled ? SyncStatus.idle : SyncStatus.disabled,
+          pendingFrames: enabled ? null : 0,
+          consecutiveFailures: enabled ? 0 : null,
+          lastRejection: null,
+          clearError: enabled,
+          backendSessionId: enabled ? state.backendSessionId : null,
+          alignmentStatus: enabled ? state.alignmentStatus : SessionAlignmentStatus.none,
+        );
+      }
     }
-    state = state.copyWith(
-      status: enabled ? SyncStatus.idle : SyncStatus.disabled,
-      pendingFrames: enabled ? null : 0,
-      consecutiveFailures: enabled ? 0 : null,
-      lastRejection: null,
-      clearError: enabled,
-      backendSessionId: enabled ? state.backendSessionId : null,
-      alignmentStatus: enabled ? state.alignmentStatus : SessionAlignmentStatus.none,
-    );
   }
 
   /// Attempt to create a backend session when V2 data mode is enabled.
