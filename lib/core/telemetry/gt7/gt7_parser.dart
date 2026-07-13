@@ -108,6 +108,7 @@ class Gt7Parser extends TelemetryParser {
           : null,
       currentPosition: packet.currentPosition,
       suggestedGear: packet.suggestedGear,
+      steeringAngle: packet.steeringAngle,
       posX: packet.posX,
       posY: packet.posY,
       posZ: packet.posZ,
