@@ -284,20 +284,30 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
     }
   }
 
-  @visibleForTesting
-  void injectPacket(Uint8List bytes) => _onPacket(bytes);
-
-  void _onPacket(Uint8List bytes) {
+  /// Feed already-parsed telemetry data into the sync buffer.
+  ///
+  /// No-op when sync is disabled. When enabled, adds [data] to the
+  /// internal buffer and triggers a flush when the batch threshold is reached.
+  /// Reuses the existing flush reentrancy guard — safe to call from
+  /// any consumer (UDP stream or dashboard listener).
+  void recordData(TelemetryData data) {
     if (state.status == SyncStatus.disabled) return;
-
-    final data = _parser.parse(bytes);
-    if (data == null) return;
 
     _buffer.add(data);
 
     if (_buffer.length >= _config.defaultBatchSize) {
       _flush();
     }
+  }
+
+  @visibleForTesting
+  void injectPacket(Uint8List bytes) => _onPacket(bytes);
+
+  void _onPacket(Uint8List bytes) {
+    final data = _parser.parse(bytes);
+    if (data == null) return;
+
+    recordData(data);
   }
 
   void _startFlushTimer() {

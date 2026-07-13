@@ -676,6 +676,117 @@ void main() {
     });
   });
 
+  group('recordData fan-out', () {
+    test('ignored when sync is disabled', () {
+      final mockClient = _SuccessMockClient();
+      final notifier = BackendSyncNotifier(
+        client: mockClient,
+        parser: MockTelemetryParser(),
+        config: _testConfig(),
+      );
+
+      expect(notifier.state.status, SyncStatus.disabled);
+
+      notifier.recordData(_sampleData(1));
+
+      expect(notifier.state.pendingFrames, 0);
+      expect(mockClient.callCount, 0);
+    });
+
+    test('buffers and flushes when enabled — counters updated', () async {
+      final mockClient = _SuccessMockClient();
+      final notifier = BackendSyncNotifier(
+        client: mockClient,
+        parser: MockTelemetryParser(),
+        config: _testConfig(),
+      );
+
+      await notifier.setEnabled(true);
+      expect(notifier.state.status, SyncStatus.idle);
+
+      notifier.recordData(_sampleData(101));
+
+      // Should be syncing (defaultBatchSize: 1 triggers immediate flush)
+      expect(notifier.state.status, SyncStatus.syncing);
+      expect(notifier.state.pendingFrames, 1);
+
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.state.status, SyncStatus.idle);
+      expect(notifier.state.totalSent, 1);
+      expect(notifier.state.totalAccepted, 1);
+      expect(notifier.state.totalRejected, 0);
+      expect(notifier.state.lastSyncAt, isNotNull);
+    });
+
+    test('multiple calls accumulate and flush at threshold', () async {
+      final config = BackendConfig(
+        defaultBatchSize: 3,
+        maxBatchSize: 10,
+        maxRetries: 0,
+        retryBaseDelay: Duration.zero,
+      );
+      final sentBatches = <int>[];
+      final client = _buildMockClient((frames) async {
+        sentBatches.add(frames.length);
+        return IngestResponse(
+          sessionId: 'test',
+          receivedFrames: frames.length,
+          acceptedFrames: frames.length,
+          rejectedFrames: 0,
+          acceptedFromUnixMs: 1,
+          acceptedToUnixMs: 100,
+          status: 'accepted',
+        );
+      });
+
+      final notifier = BackendSyncNotifier(
+        client: client,
+        parser: MockTelemetryParser(),
+        config: config,
+      );
+      await notifier.setEnabled(true);
+
+      // 2 frames — below threshold (defaultBatchSize: 3)
+      notifier.recordData(_sampleData(1));
+      notifier.recordData(_sampleData(2));
+
+      await Future(() => null);
+      // pendingFrames is only updated during flush — data is buffered
+      // but state still shows 0 until flush runs
+      expect(sentBatches.isEmpty, isTrue);
+
+      // 3rd frame — triggers flush
+      notifier.recordData(_sampleData(3));
+      await Future(() => null);
+
+      expect(sentBatches.length, 1);
+      expect(sentBatches.first, 3);
+      expect(notifier.state.pendingFrames, 0);
+    });
+
+    test('works alongside injectPacket from UDP path', () async {
+      final mockClient = _SuccessMockClient();
+      final notifier = BackendSyncNotifier(
+        client: mockClient,
+        parser: MockTelemetryParser(),
+        config: _testConfig(),
+      );
+
+      await notifier.setEnabled(true);
+
+      // Feed via UDP path
+      notifier.injectPacket(Uint8List(1));
+      await Future<void>.delayed(Duration.zero);
+      expect(mockClient.callCount, 1);
+
+      // Feed via recordData
+      notifier.recordData(_sampleData(2));
+      await Future<void>.delayed(Duration.zero);
+      expect(mockClient.callCount, 2);
+    });
+  });
+
   group('Disable clears stale buffer', () {
     test('setEnabled(false) empties buffer', () async {
       final sentBatches = <int>[];
@@ -1329,6 +1440,26 @@ BackendConfig _testConfig() {
     defaultBatchSize: 1,
     maxRetries: 0,
     retryBaseDelay: Duration.zero,
+  );
+}
+
+/// Return a minimal [TelemetryData] with a given [packetId] for testing.
+TelemetryData _sampleData(int packetId) {
+  return TelemetryData(
+    timestamp: DateTime.fromMillisecondsSinceEpoch(1720656000000 + packetId),
+    packetId: packetId,
+    speedKmh: 100.0 + packetId,
+    rpm: 5000.0,
+    gear: 3,
+    throttle: 0.5,
+    brake: 0.1,
+    steeringAngle: 0.0,
+    fuelCurrentL: 50.0,
+    posX: 0.0,
+    posY: 0.0,
+    posZ: 0.0,
+    currentLap: 1,
+    currentLapTime: const Duration(seconds: 30),
   );
 }
 
