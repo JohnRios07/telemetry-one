@@ -234,7 +234,7 @@ void main() {
       expect(notifier.state.lastRejectionCode, 'invalid_throttle');
     });
 
-    test('success without rejection clears lastRejectionCode', () async {
+    test('success without rejection preserves lastRejectionCode', () async {
       var callIndex = 0;
       final client = _buildMockClient((frames) async {
         callIndex++;
@@ -277,7 +277,61 @@ void main() {
 
       notifier.injectPacket(Uint8List(2));
       await Future<void>.delayed(Duration.zero);
-      expect(notifier.state.lastRejectionCode, isNull);
+      expect(notifier.state.lastRejectionCode, 'invalid_throttle');
+    });
+
+    test('partial rejection then accepted keeps code and totalRejected cumulative',
+        () async {
+      var callIndex = 0;
+      final client = _buildMockClient((frames) async {
+        callIndex++;
+        if (callIndex == 1) {
+          return IngestResponse(
+            sessionId: 'test',
+            receivedFrames: frames.length,
+            acceptedFrames: 0,
+            rejectedFrames: 14,
+            acceptedFromUnixMs: 1,
+            acceptedToUnixMs: 100,
+            status: 'partial',
+            rejectionSummary: const RejectionSummary(reasons: [
+              RejectionReasonCount(code: 'current_lap_time_regressed', count: 14),
+            ]),
+          );
+        }
+        return IngestResponse(
+          sessionId: 'test',
+          receivedFrames: frames.length,
+          acceptedFrames: frames.length,
+          rejectedFrames: 0,
+          acceptedFromUnixMs: 1,
+          acceptedToUnixMs: 100,
+          status: 'accepted',
+        );
+      });
+
+      final notifier = BackendSyncNotifier(
+        client: client,
+        parser: MockTelemetryParser(),
+        config: _testConfig(),
+      );
+
+      await notifier.setEnabled(true);
+
+      // First batch: partial with 14 rejected frames
+      notifier.injectPacket(Uint8List(1));
+      await Future<void>.delayed(Duration.zero);
+      expect(notifier.state.lastRejectionCode, 'current_lap_time_regressed');
+      expect(notifier.state.totalRejected, 14);
+
+      // Second batch: fully accepted, no rejection summary
+      notifier.injectPacket(Uint8List(2));
+      await Future<void>.delayed(Duration.zero);
+
+      // totalRejected stays at 14 (no new rejections)
+      expect(notifier.state.totalRejected, 14);
+      // lastRejectionCode preserved across accepted batch
+      expect(notifier.state.lastRejectionCode, 'current_lap_time_regressed');
     });
   });
 
