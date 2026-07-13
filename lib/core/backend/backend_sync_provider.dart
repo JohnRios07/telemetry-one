@@ -20,6 +20,13 @@ enum SyncStatus {
   failed,
 }
 
+enum SessionAlignmentStatus {
+  none,
+  pending,
+  created,
+  failed,
+}
+
 class BackendSyncState {
   final String sessionId;
   final SyncStatus status;
@@ -34,6 +41,13 @@ class BackendSyncState {
   final DateTime? lastSyncAt;
   final DateTime? lastErrorAt;
 
+  /// Backend-owned session ID (session_*) when session alignment succeeds.
+  /// When null, [sessionId] (local_*) is used for all backend calls.
+  final String? backendSessionId;
+
+  /// Whether backend session creation was attempted and its outcome.
+  final SessionAlignmentStatus alignmentStatus;
+
   const BackendSyncState({
     required this.sessionId,
     this.status = SyncStatus.disabled,
@@ -47,10 +61,16 @@ class BackendSyncState {
     this.lastErrorMessage,
     this.lastSyncAt,
     this.lastErrorAt,
+    this.backendSessionId,
+    this.alignmentStatus = SessionAlignmentStatus.none,
   });
 
   bool get enabled => status != SyncStatus.disabled;
   bool get isOffline => status == SyncStatus.degraded || status == SyncStatus.failed;
+
+  /// Returns the backend session ID when session alignment succeeded,
+  /// or the local session ID as fallback.
+  String get effectiveSessionId => backendSessionId ?? sessionId;
 
   BackendSyncState copyWith({
     SyncStatus? status,
@@ -65,6 +85,8 @@ class BackendSyncState {
     bool clearError = false,
     DateTime? lastSyncAt,
     Object? lastErrorAt = _unset,
+    Object? backendSessionId = _unset,
+    SessionAlignmentStatus? alignmentStatus,
   }) {
     return BackendSyncState(
       sessionId: sessionId,
@@ -85,6 +107,10 @@ class BackendSyncState {
       lastErrorAt: lastErrorAt == _unset
           ? this.lastErrorAt
           : lastErrorAt as DateTime?,
+      backendSessionId: backendSessionId == _unset
+          ? this.backendSessionId
+          : backendSessionId as String?,
+      alignmentStatus: alignmentStatus ?? this.alignmentStatus,
     );
   }
 }
@@ -126,32 +152,136 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
     );
   }
 
-  void disconnect() {
-    _subscription?.cancel();
-    _subscription = null;
-    _flushTimer?.cancel();
-    _flushTimer = null;
-    state = state.copyWith(
-      udpConnected: false,
-      status: SyncStatus.disabled,
-    );
+  Future<void> _finishBackendSession() async {
+    final backendId = state.backendSessionId;
+    if (backendId == null) return;
+
+    try {
+      await _client.finishSession(
+        backendId,
+        FinishSessionRequest(
+          endedUnixMs: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+      debugPrint('[BackendSync] Finished backend session: $backendId');
+    } on BackendRequestException catch (e) {
+      debugPrint(
+        '[BackendSync] Finish session error (non-fatal): '
+        '${e.error.code} — ${e.error.message}',
+      );
+    } on Exception catch (e) {
+      debugPrint('[BackendSync] Finish session unexpected error: $e');
+    }
   }
 
-  void setEnabled(bool enabled) {
-    if (enabled && !state.enabled) {
-      _startFlushTimer();
-    } else if (!enabled && state.enabled) {
+  Future<void> disconnect() async {
+    try {
+      await _finishBackendSession();
+    } finally {
+      _subscription?.cancel();
+      _subscription = null;
       _flushTimer?.cancel();
       _flushTimer = null;
-      _buffer.clear();
+      state = state.copyWith(
+        udpConnected: false,
+        status: SyncStatus.disabled,
+        backendSessionId: null,
+        alignmentStatus: SessionAlignmentStatus.none,
+      );
     }
+  }
+
+  Future<void> setEnabled(bool enabled) async {
+    bool skipStateUpdate = false;
+
+    try {
+      if (enabled && !state.enabled) {
+        await _ensureBackendSession();
+        // Guard: if V2 is enabled and setEnabled(false) was called during the
+        // HTTP gap, alignmentStatus was reset to none — don't start flush timer.
+        if (_config.useV2Data && state.alignmentStatus == SessionAlignmentStatus.none) {
+          skipStateUpdate = true;
+        } else {
+          _startFlushTimer();
+        }
+      } else if (!enabled && state.enabled) {
+        try {
+          await _finishBackendSession();
+        } finally {
+          _flushTimer?.cancel();
+          _flushTimer = null;
+          _buffer.clear();
+        }
+      }
+    } finally {
+      if (!skipStateUpdate) {
+        state = state.copyWith(
+          status: enabled ? SyncStatus.idle : SyncStatus.disabled,
+          pendingFrames: enabled ? null : 0,
+          consecutiveFailures: enabled ? 0 : null,
+          lastRejection: null,
+          clearError: enabled,
+          backendSessionId: enabled ? state.backendSessionId : null,
+          alignmentStatus: enabled ? state.alignmentStatus : SessionAlignmentStatus.none,
+        );
+      }
+    }
+  }
+
+  /// Attempt to create a backend session when V2 data mode is enabled.
+  /// On success, [state.backendSessionId] is set to the backend-owned ID.
+  /// On failure, sync continues with the local session ID.
+  Future<void> _ensureBackendSession() async {
+    if (!_config.useV2Data) return;
+    if (state.alignmentStatus == SessionAlignmentStatus.created) return;
+    if (state.alignmentStatus == SessionAlignmentStatus.pending) return;
+
     state = state.copyWith(
-      status: enabled ? SyncStatus.idle : SyncStatus.disabled,
-      pendingFrames: enabled ? null : 0,
-      consecutiveFailures: enabled ? 0 : null,
-      lastRejection: null,
-      clearError: enabled,
+      alignmentStatus: SessionAlignmentStatus.pending,
     );
+
+    try {
+      final response = await _client.createSession(
+        CreateSessionRequest(
+          source: 'flutter',
+          game: 'gt7',
+          platform: 'ps5',
+          driverAlias: _config.driverAlias,
+          startedUnixMs: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+
+      // Guard: disable won during async gap — don't adopt this session
+      if (state.alignmentStatus != SessionAlignmentStatus.pending) return;
+      state = state.copyWith(
+        backendSessionId: response.sessionId,
+        alignmentStatus: SessionAlignmentStatus.created,
+      );
+      debugPrint(
+        '[BackendSync] Backend session created: ${response.sessionId}',
+      );
+    } on BackendRequestException catch (e) {
+      state = state.copyWith(
+        alignmentStatus: SessionAlignmentStatus.failed,
+      );
+      debugPrint(
+        '[BackendSync] Session creation failed (continuing with local ID): '
+        '${e.error.code} — ${e.error.message}',
+      );
+    } on Exception catch (e) {
+      state = state.copyWith(
+        alignmentStatus: SessionAlignmentStatus.failed,
+      );
+      debugPrint(
+        '[BackendSync] Session creation unexpected error (continuing with local ID): $e',
+      );
+    } finally {
+      if (state.alignmentStatus == SessionAlignmentStatus.pending) {
+        state = state.copyWith(
+          alignmentStatus: SessionAlignmentStatus.failed,
+        );
+      }
+    }
   }
 
   @visibleForTesting
@@ -212,7 +342,7 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
 
     try {
       final response = await _client.postFrameBatch(
-        state.sessionId,
+        state.effectiveSessionId,
         jsonFrames,
       );
       final now = DateTime.now();
@@ -270,7 +400,7 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
           'buffered ${batch.length} frames',
         );
       }
-    } on Object catch (e) {
+    } on Exception catch (e) {
       _buffer.insertAll(0, batch);
       _trimBuffer();
       if (state.status != SyncStatus.failed) {
@@ -314,13 +444,6 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
   }
 }
 
-final backendSyncProvider =
-    StateNotifierProvider<BackendSyncNotifier, BackendSyncState>((ref) {
-      final notifier = BackendSyncNotifier();
-      ref.onDispose(() => notifier.dispose());
-      return notifier;
-    });
-
 final backendConfigProvider = Provider<BackendConfig>((ref) {
   return const BackendConfig();
 });
@@ -329,3 +452,15 @@ final backendClientProvider = Provider<BackendClient>((ref) {
   final config = ref.watch(backendConfigProvider);
   return BackendClient(config: config);
 });
+
+final backendSyncProvider =
+    StateNotifierProvider<BackendSyncNotifier, BackendSyncState>((ref) {
+      final client = ref.watch(backendClientProvider);
+      final config = ref.watch(backendConfigProvider);
+      final notifier = BackendSyncNotifier(
+        client: client,
+        config: config,
+      );
+      ref.onDispose(() => notifier.dispose());
+      return notifier;
+    });

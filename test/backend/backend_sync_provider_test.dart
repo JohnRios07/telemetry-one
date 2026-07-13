@@ -73,39 +73,43 @@ void main() {
       expect(notifier.state.udpConnected, isFalse);
       expect(notifier.state.pendingFrames, 0);
       expect(notifier.state.consecutiveFailures, 0);
+      expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+      expect(notifier.state.backendSessionId, isNull);
     });
 
-    test('setEnabled(true) transitions to idle', () {
+    test('setEnabled(true) transitions to idle', () async {
       final notifier = BackendSyncNotifier(
         config: const BackendConfig(),
       );
 
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
 
       expect(notifier.state.status, SyncStatus.idle);
       expect(notifier.state.enabled, isTrue);
       expect(notifier.state.consecutiveFailures, 0);
+      // V2 disabled by default — no alignment attempt
+      expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
     });
 
-    test('setEnabled(false) transitions back to disabled', () {
+    test('setEnabled(false) transitions back to disabled', () async {
       final notifier = BackendSyncNotifier(
         config: const BackendConfig(),
       );
 
-      notifier.setEnabled(true);
-      notifier.setEnabled(false);
+      await notifier.setEnabled(true);
+      await notifier.setEnabled(false);
 
       expect(notifier.state.status, SyncStatus.disabled);
       expect(notifier.state.enabled, isFalse);
     });
 
-    test('disconnect transitions to disabled', () {
+    test('disconnect transitions to disabled', () async {
       final notifier = BackendSyncNotifier(
         config: const BackendConfig(),
       );
 
-      notifier.setEnabled(true);
-      notifier.disconnect();
+      await notifier.setEnabled(true);
+      await notifier.disconnect();
 
       expect(notifier.state.status, SyncStatus.disabled);
       expect(notifier.state.udpConnected, isFalse);
@@ -143,7 +147,7 @@ void main() {
         config: _testConfig(),
       );
 
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
       // Push a frame -> triggers flush
       notifier.injectPacket(Uint8List(1));
       await Future<void>.delayed(Duration.zero);
@@ -151,7 +155,7 @@ void main() {
       expect(mockClient.callCount, 1);
       expect(notifier.state.status, SyncStatus.idle);
 
-      notifier.setEnabled(false);
+      await notifier.setEnabled(false);
       // Push more frames — ignored
       for (var i = 0; i < 5; i++) {
         notifier.injectPacket(Uint8List(1));
@@ -172,7 +176,7 @@ void main() {
         config: _testConfig(),
       );
 
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
       expect(notifier.state.status, SyncStatus.idle);
 
       // Push one packet -> triggers flush (defaultBatchSize: 1)
@@ -212,7 +216,7 @@ void main() {
         config: _testConfig(),
       );
 
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
 
       // Push 3 frames (each triggers an independent flush with defaultBatchSize:1)
       notifier.injectPacket(Uint8List(0));
@@ -252,7 +256,7 @@ void main() {
         config: _testConfig(),
       );
 
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
 
       // First batch — rejected
       notifier.injectPacket(Uint8List(1));
@@ -280,7 +284,7 @@ void main() {
         config: _testConfig(),
       );
 
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
 
       notifier.injectPacket(Uint8List(1));
       await Future<void>.delayed(Duration.zero);
@@ -323,7 +327,7 @@ void main() {
         config: _testConfig(),
       );
 
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
 
       // First flush — fails
       notifier.injectPacket(Uint8List(1));
@@ -352,7 +356,7 @@ void main() {
         config: _testConfig(),
       );
 
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
 
       for (var i = 0; i < 3; i++) {
         notifier.injectPacket(Uint8List(i));
@@ -374,7 +378,7 @@ void main() {
         config: _testConfig(),
       );
 
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
 
       notifier.injectPacket(Uint8List(1));
       await Future<void>.delayed(Duration.zero);
@@ -415,7 +419,7 @@ void main() {
         config: _testConfig(),
       );
 
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
 
       notifier.injectPacket(Uint8List(1));
       await Future<void>.delayed(Duration.zero);
@@ -440,7 +444,7 @@ void main() {
         config: _testConfig(),
       );
 
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
 
       // First frame — flush fails, frames go back to buffer
       notifier.injectPacket(Uint8List(1));
@@ -472,7 +476,7 @@ void main() {
         config: config,
       );
 
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
 
       // Push frames until buffer overflows (maxBatchSize*2 = 6)
       // Each frame triggers a flush that fails and re-buffers.
@@ -504,7 +508,7 @@ void main() {
 
       expect(notifier.state.sessionId, startsWith('local_'));
 
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
       notifier.injectPacket(Uint8List(1));
       await Future<void>.delayed(Duration.zero);
 
@@ -543,7 +547,7 @@ void main() {
         parser: MockTelemetryParser(),
         config: _testConfig(),
       );
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
 
       // Inject 3 frames rapidly — only 1 flush should run
       notifier.injectPacket(Uint8List(1));
@@ -584,7 +588,7 @@ void main() {
         parser: MockTelemetryParser(),
         config: config,
       );
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
 
       // Inject 7 frames — only 2 sent in first flush, 5 remain queued
       for (var i = 0; i < 7; i++) {
@@ -645,7 +649,7 @@ void main() {
         parser: MockTelemetryParser(),
         config: config,
       );
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
 
       // Inject 3 frames — flush triggers (fails) → 3 re-inserted at front
       notifier.injectPacket(Uint8List(1));
@@ -692,14 +696,14 @@ void main() {
         parser: MockTelemetryParser(),
         config: _testConfig(),
       );
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
 
       // Fill buffer with 3 frames that don't trigger auto-flush
       // (defaultBatchSize = 1, so first frame already triggers flush)
       // Use a config with larger batch to accumulate
       // Actually, with defaultBatchSize=1, each frame triggers a flush
       // Let's test differently: push frames in disabled state
-      notifier.setEnabled(false);
+      await notifier.setEnabled(false);
       notifier.injectPacket(Uint8List(1));
       notifier.injectPacket(Uint8List(2));
       notifier.injectPacket(Uint8List(3));
@@ -709,7 +713,7 @@ void main() {
       expect(notifier.state.pendingFrames, 0);
 
       // Re-enable — should not send stale frames
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
       await Future<void>.delayed(Duration.zero);
 
       expect(sentBatches.isEmpty, isTrue);
@@ -730,12 +734,450 @@ void main() {
       notifier.connect(udp);
       expect(notifier.state.udpConnected, isTrue);
 
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
 
       udp.push(Uint8List(1));
       await Future<void>.delayed(Duration.zero);
 
       expect(mockClient.callCount, 1);
+    });
+  });
+
+    group('V2 disable wins race against in-flight createSession', () {
+    test('disable during createSession HTTP gap keeps sync disabled', () async {
+      final controller = _ControllableCreateMockClient();
+      final config = BackendConfig(
+        useV2Data: true,
+        defaultBatchSize: 1,
+        maxRetries: 0,
+        retryBaseDelay: Duration.zero,
+      );
+      final notifier = BackendSyncNotifier(
+        client: controller,
+        parser: MockTelemetryParser(),
+        config: config,
+      );
+
+      // Step 1: enable — createSession starts but won't complete until we release
+      final enableFuture = notifier.setEnabled(true);
+
+      expect(notifier.state.alignmentStatus, SessionAlignmentStatus.pending);
+      expect(controller.pendingCreateCount, 1);
+
+      // Step 2: disable while createSession is in-flight
+      await notifier.setEnabled(false);
+
+      expect(notifier.state.status, SyncStatus.disabled);
+      expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+      expect(notifier.state.backendSessionId, isNull);
+
+      // Step 3: complete the in-flight createSession
+      controller.completePendingCreate();
+
+      // Allow the continuations to run
+      await Future<void>.delayed(Duration.zero);
+      await enableFuture;
+
+      // Step 4: assert sync is still disabled — race was won by disable
+      expect(notifier.state.status, SyncStatus.disabled);
+      expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+      expect(notifier.state.backendSessionId, isNull);
+      expect(notifier.state.enabled, isFalse);
+
+      // No flush timer should be active — inject a packet and see it ignored
+      notifier.injectPacket(Uint8List(1));
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.batchCallCount, 0);
+    });
+
+    test('enable after disable race still works fresh', () async {
+      final controller = _ControllableCreateMockClient();
+      final config = BackendConfig(
+        useV2Data: true,
+        defaultBatchSize: 1,
+        maxRetries: 0,
+        retryBaseDelay: Duration.zero,
+      );
+      final notifier = BackendSyncNotifier(
+        client: controller,
+        parser: MockTelemetryParser(),
+        config: config,
+      );
+
+      // Don't await enableFuture — let it race naturally
+      notifier.setEnabled(true);
+      await notifier.setEnabled(false);
+      controller.completePendingCreate();
+      // Drain microtasks so the guard returns
+      await Future<void>.delayed(Duration.zero);
+
+      // Assert disable won the race
+      expect(notifier.state.status, SyncStatus.disabled);
+      expect(notifier.state.backendSessionId, isNull);
+      expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+
+      // Fresh enable with a separate notifier/mock
+      // Don't await — let it block on HTTP, then complete the pending call
+      final controller2 = _ControllableCreateMockClient();
+      final notifier2 = BackendSyncNotifier(
+        client: controller2,
+        parser: MockTelemetryParser(),
+        config: config,
+      );
+      notifier2.setEnabled(true);
+      controller2.completePendingCreate();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier2.state.status, SyncStatus.idle);
+      expect(notifier2.state.backendSessionId, 'session_backend_test_1');
+      expect(notifier2.state.alignmentStatus, SessionAlignmentStatus.created);
+    });
+  });
+
+  group('V2 session alignment', () {
+    group('V2 disabled (default) — no alignment', () {
+      test('setEnabled does not attempt backend session creation', () async {
+        final client = _SessionCreateMockClient();
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: _testConfig(),
+        );
+
+        await notifier.setEnabled(true);
+
+        expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+        expect(notifier.state.backendSessionId, isNull);
+        expect(client.createCallCount, 0);
+      });
+    });
+
+    group('V2 enabled — successful creation', () {
+      test('creates backend session on setEnabled', () async {
+        final client = _SessionCreateMockClient();
+        final config = BackendConfig(
+          useV2Data: true,
+          driverAlias: 'testdriver',
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+        expect(notifier.state.backendSessionId, isNull);
+
+        await notifier.setEnabled(true);
+
+        expect(client.createCallCount, 1);
+        expect(notifier.state.alignmentStatus, SessionAlignmentStatus.created);
+        expect(notifier.state.backendSessionId, 'session_backend_test_1');
+        expect(notifier.state.effectiveSessionId, 'session_backend_test_1');
+        expect(notifier.state.status, SyncStatus.idle);
+
+        // Verify request payload
+        expect(client.lastCreateRequest, isNotNull);
+        expect(client.lastCreateRequest!.source, 'flutter');
+        expect(client.lastCreateRequest!.game, 'gt7');
+        expect(client.lastCreateRequest!.platform, 'ps5');
+        expect(client.lastCreateRequest!.driverAlias, 'testdriver');
+      });
+
+      test('uses backend session ID for frame batch', () async {
+        final client = _SessionCreateMockClient();
+        final config = BackendConfig(
+          useV2Data: true,
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        await notifier.setEnabled(true);
+        expect(notifier.state.backendSessionId, 'session_backend_test_1');
+
+        notifier.injectPacket(Uint8List(1));
+        await Future<void>.delayed(Duration.zero);
+
+        // Frame batch should have been sent with backend session ID
+        expect(client.lastBatchSessionId, 'session_backend_test_1');
+        expect(notifier.state.totalAccepted, 1);
+      });
+
+      test('calls finish on disable when backend session exists', () async {
+        final client = _SessionCreateMockClient();
+        final config = BackendConfig(
+          useV2Data: true,
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        await notifier.setEnabled(true);
+        expect(notifier.state.backendSessionId, 'session_backend_test_1');
+        expect(client.finishCallCount, 0);
+
+        await notifier.setEnabled(false);
+
+        expect(client.finishCallCount, 1);
+        expect(client.lastFinishSessionId, 'session_backend_test_1');
+        expect(notifier.state.backendSessionId, isNull);
+        expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+      });
+
+      test('calls finish on disconnect when backend session exists', () async {
+        final client = _SessionCreateMockClient();
+        final config = BackendConfig(
+          useV2Data: true,
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        await notifier.setEnabled(true);
+        expect(client.finishCallCount, 0);
+
+        await notifier.disconnect();
+
+        expect(client.finishCallCount, 1);
+        expect(client.lastFinishSessionId, 'session_backend_test_1');
+      });
+    });
+
+    group('V2 enabled — creation failure fallback', () {
+      test('falls back to local ID on creation failure', () async {
+        final client = _SessionCreateFailMockClient();
+        final config = BackendConfig(
+          useV2Data: true,
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        await notifier.setEnabled(true);
+
+        expect(client.createCallCount, 1);
+        expect(notifier.state.alignmentStatus, SessionAlignmentStatus.failed);
+        expect(notifier.state.backendSessionId, isNull);
+        expect(notifier.state.effectiveSessionId, startsWith('local_'));
+        expect(notifier.state.status, SyncStatus.idle);
+      });
+
+      test('uses local ID for frame batch when creation fails', () async {
+        final client = _SessionCreateFailMockClient();
+        final config = BackendConfig(
+          useV2Data: true,
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        await notifier.setEnabled(true);
+        expect(notifier.state.backendSessionId, isNull);
+
+        notifier.injectPacket(Uint8List(1));
+        await Future<void>.delayed(Duration.zero);
+
+        // Frame batch should be sent with local session ID
+        expect(client.lastBatchSessionId, startsWith('local_'));
+      });
+
+      test('does not call finish when no backend session created', () async {
+        final client = _SessionCreateFailMockClient();
+        final config = BackendConfig(
+          useV2Data: true,
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        await notifier.setEnabled(true);
+        expect(client.finishCallCount, 0);
+
+        await notifier.setEnabled(false);
+
+        expect(client.finishCallCount, 0);
+      });
+    });
+
+    group('V2 enabled — Dart Error during creation', () {
+      test('Error does not leave alignmentStatus stuck at pending', () async {
+        final client = _SessionCreateErrorMockClient();
+        final config = BackendConfig(
+          useV2Data: true,
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+
+        try {
+          await notifier.setEnabled(true);
+          fail('Expected Error to propagate');
+        } catch (_) {
+          // Error propagated — alignmentStatus should have been reset
+        }
+
+        expect(
+          notifier.state.alignmentStatus,
+          SessionAlignmentStatus.failed,
+          reason: 'finally block reset pending to failed before Error propagation',
+        );
+
+        // Guard: not stuck at pending — subsequent retry should work
+        expect(client.createCallCount, 1);
+      });
+
+      test('retry after Error still creates session', () async {
+        final config = BackendConfig(
+          useV2Data: true,
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+
+        final client = _SessionCreateMockClient();
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        await notifier.setEnabled(true);
+        expect(client.createCallCount, 1);
+        expect(notifier.state.alignmentStatus, SessionAlignmentStatus.created);
+        expect(notifier.state.backendSessionId, 'session_backend_test_1');
+      });
+    });
+
+    group('V2 enabled — finish failure non-fatal', () {
+      test('disconnect cleanup runs even if finish throws Dart Error', () async {
+        final client = _SessionCreateFinishErrorMockClient();
+        final config = BackendConfig(
+          useV2Data: true,
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        await notifier.setEnabled(true);
+        expect(notifier.state.backendSessionId, 'session_backend_test_1');
+        expect(notifier.state.alignmentStatus, SessionAlignmentStatus.created);
+
+        try {
+          await notifier.disconnect();
+          fail('Expected Error to propagate');
+        } catch (_) {
+          // Error propagated after cleanup
+        }
+
+        expect(client.finishCallCount, 1);
+        expect(notifier.state.udpConnected, isFalse);
+        expect(notifier.state.status, SyncStatus.disabled);
+        expect(notifier.state.backendSessionId, isNull);
+        expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+      });
+
+      test('setEnabled(false) cleanup runs even if finish throws Dart Error',
+          () async {
+        final client = _SessionCreateFinishErrorMockClient();
+        final config = BackendConfig(
+          useV2Data: true,
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        await notifier.setEnabled(true);
+        expect(notifier.state.backendSessionId, 'session_backend_test_1');
+
+        try {
+          await notifier.setEnabled(false);
+          fail('Expected Error to propagate');
+        } catch (_) {
+          // Error propagated after cleanup
+        }
+
+        expect(client.finishCallCount, 1);
+        expect(notifier.state.status, SyncStatus.disabled);
+        expect(notifier.state.backendSessionId, isNull);
+        expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+        expect(notifier.state.pendingFrames, 0);
+      });
+
+      test('finish failure does not prevent state transition', () async {
+        final client = _SessionCreateFinishFailMockClient();
+        final config = BackendConfig(
+          useV2Data: true,
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        await notifier.setEnabled(true);
+        expect(notifier.state.backendSessionId, 'session_backend_test_1');
+
+        await notifier.setEnabled(false);
+
+        // Should still transition to disabled even though finish failed
+        expect(client.finishCallCount, 1);
+        expect(notifier.state.status, SyncStatus.disabled);
+        expect(notifier.state.backendSessionId, isNull);
+      });
     });
   });
 }
@@ -888,4 +1330,246 @@ BackendConfig _testConfig() {
     maxRetries: 0,
     retryBaseDelay: Duration.zero,
   );
+}
+
+class _SessionCreateMockClient extends BackendClient {
+  int createCallCount = 0;
+  int finishCallCount = 0;
+  CreateSessionRequest? lastCreateRequest;
+  String? lastFinishSessionId;
+  int? lastFinishEndedUnixMs;
+  String? lastBatchSessionId;
+
+  _SessionCreateMockClient({BackendConfig? config}) : super(config: config);
+
+  @override
+  Future<CreateSessionResponse> createSession(
+    CreateSessionRequest request,
+  ) async {
+    createCallCount++;
+    lastCreateRequest = request;
+    return CreateSessionResponse(sessionId: 'session_backend_test_1');
+  }
+
+  @override
+  Future<FinishSessionResponse> finishSession(
+    String sessionId,
+    FinishSessionRequest request,
+  ) async {
+    finishCallCount++;
+    lastFinishSessionId = sessionId;
+    lastFinishEndedUnixMs = request.endedUnixMs;
+    return const FinishSessionResponse(status: 'finished');
+  }
+
+  @override
+  Future<IngestResponse> postFrameBatch(
+    String sessionId,
+    List<Map<String, dynamic>> frames,
+  ) async {
+    lastBatchSessionId = sessionId;
+    return IngestResponse(
+      sessionId: sessionId,
+      receivedFrames: frames.length,
+      acceptedFrames: frames.length,
+      rejectedFrames: 0,
+      acceptedFromUnixMs: 1,
+      acceptedToUnixMs: 100,
+      status: 'accepted',
+    );
+  }
+}
+
+class _SessionCreateFailMockClient extends BackendClient {
+  int createCallCount = 0;
+  int finishCallCount = 0;
+  String? lastBatchSessionId;
+
+  _SessionCreateFailMockClient({BackendConfig? config}) : super(config: config);
+
+  @override
+  Future<CreateSessionResponse> createSession(
+    CreateSessionRequest request,
+  ) async {
+    createCallCount++;
+    throw BackendRequestException(
+      statusCode: 0,
+      error: const BackendError(
+        code: 'network_error',
+        message: 'Connection failed',
+      ),
+    );
+  }
+
+  @override
+  Future<FinishSessionResponse> finishSession(
+    String sessionId,
+    FinishSessionRequest request,
+  ) async {
+    finishCallCount++;
+    return const FinishSessionResponse(status: 'finished');
+  }
+
+  @override
+  Future<IngestResponse> postFrameBatch(
+    String sessionId,
+    List<Map<String, dynamic>> frames,
+  ) async {
+    lastBatchSessionId = sessionId;
+    return IngestResponse(
+      sessionId: sessionId,
+      receivedFrames: frames.length,
+      acceptedFrames: frames.length,
+      rejectedFrames: 0,
+      acceptedFromUnixMs: 1,
+      acceptedToUnixMs: 100,
+      status: 'accepted',
+    );
+  }
+}
+
+/// Mock that holds createSession until [completePendingCreate] is called.
+class _ControllableCreateMockClient extends BackendClient {
+  int pendingCreateCount = 0;
+  int batchCallCount = 0;
+  Completer<CreateSessionResponse>? _createCompleter;
+
+  _ControllableCreateMockClient({BackendConfig? config}) : super(config: config);
+
+  @override
+  Future<CreateSessionResponse> createSession(
+    CreateSessionRequest request,
+  ) async {
+    pendingCreateCount++;
+    _createCompleter = Completer<CreateSessionResponse>();
+    return _createCompleter!.future;
+  }
+
+  void completePendingCreate() {
+    if (_createCompleter != null && !_createCompleter!.isCompleted) {
+      _createCompleter!.complete(
+        CreateSessionResponse(sessionId: 'session_backend_test_1'),
+      );
+    }
+  }
+
+  @override
+  Future<IngestResponse> postFrameBatch(
+    String sessionId,
+    List<Map<String, dynamic>> frames,
+  ) async {
+    batchCallCount++;
+    return IngestResponse(
+      sessionId: sessionId,
+      receivedFrames: frames.length,
+      acceptedFrames: frames.length,
+      rejectedFrames: 0,
+      acceptedFromUnixMs: 1,
+      acceptedToUnixMs: 100,
+      status: 'accepted',
+    );
+  }
+}
+
+class _SessionCreateErrorMockClient extends BackendClient {
+  int createCallCount = 0;
+
+  _SessionCreateErrorMockClient({BackendConfig? config}) : super(config: config);
+
+  @override
+  Future<CreateSessionResponse> createSession(
+    CreateSessionRequest request,
+  ) async {
+    createCallCount++;
+    throw Error(); // Dart Error — not caught by on Exception
+  }
+}
+
+/// Mock that throws a Dart Error on finishSession.
+class _SessionCreateFinishErrorMockClient extends BackendClient {
+  int createCallCount = 0;
+  int finishCallCount = 0;
+
+  _SessionCreateFinishErrorMockClient({BackendConfig? config})
+    : super(config: config);
+
+  @override
+  Future<CreateSessionResponse> createSession(
+    CreateSessionRequest request,
+  ) async {
+    createCallCount++;
+    return CreateSessionResponse(sessionId: 'session_backend_test_1');
+  }
+
+  @override
+  Future<FinishSessionResponse> finishSession(
+    String sessionId,
+    FinishSessionRequest request,
+  ) async {
+    finishCallCount++;
+    throw Error(); // Dart Error — not caught by on Exception
+  }
+
+  @override
+  Future<IngestResponse> postFrameBatch(
+    String sessionId,
+    List<Map<String, dynamic>> frames,
+  ) async {
+    return IngestResponse(
+      sessionId: sessionId,
+      receivedFrames: frames.length,
+      acceptedFrames: frames.length,
+      rejectedFrames: 0,
+      acceptedFromUnixMs: 1,
+      acceptedToUnixMs: 100,
+      status: 'accepted',
+    );
+  }
+}
+
+class _SessionCreateFinishFailMockClient extends BackendClient {
+  int createCallCount = 0;
+  int finishCallCount = 0;
+
+  _SessionCreateFinishFailMockClient({BackendConfig? config})
+    : super(config: config);
+
+  @override
+  Future<CreateSessionResponse> createSession(
+    CreateSessionRequest request,
+  ) async {
+    createCallCount++;
+    return CreateSessionResponse(sessionId: 'session_backend_test_1');
+  }
+
+  @override
+  Future<FinishSessionResponse> finishSession(
+    String sessionId,
+    FinishSessionRequest request,
+  ) async {
+    finishCallCount++;
+    throw BackendRequestException(
+      statusCode: 500,
+      error: const BackendError(
+        code: 'internal_error',
+        message: 'server error',
+      ),
+    );
+  }
+
+  @override
+  Future<IngestResponse> postFrameBatch(
+    String sessionId,
+    List<Map<String, dynamic>> frames,
+  ) async {
+    return IngestResponse(
+      sessionId: sessionId,
+      receivedFrames: frames.length,
+      acceptedFrames: frames.length,
+      rejectedFrames: 0,
+      acceptedFromUnixMs: 1,
+      acceptedToUnixMs: 100,
+      status: 'accepted',
+    );
+  }
 }

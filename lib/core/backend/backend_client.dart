@@ -139,6 +139,179 @@ class BackendClient {
     }
   }
 
+  Future<CreateSessionResponse> createSession(
+    CreateSessionRequest request,
+  ) async {
+    final body = jsonEncode(request.toJson());
+    final uri = Uri.parse('${config.apiBase}/sessions');
+
+    var lastError = '';
+    for (var attempt = 0; attempt <= config.maxRetries; attempt++) {
+      if (attempt > 0) {
+        await Future.delayed(config.retryBaseDelay * (1 << (attempt - 1)));
+      }
+
+      try {
+        final httpRequest = await _client.postUrl(uri);
+        httpRequest.headers.contentType = ContentType.json;
+        httpRequest.write(body);
+        final response = await httpRequest.close();
+        final responseBody = await utf8.decodeStream(response);
+
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          return CreateSessionResponse.fromJson(
+            jsonDecode(responseBody) as Map<String, dynamic>,
+          );
+        }
+
+        final error = BackendError.parse(responseBody);
+
+        if (error.isRetryable && attempt < config.maxRetries) {
+          debugPrint(
+            '[BackendClient] CreateSession retryable error '
+            '(attempt ${attempt + 1}): ${error.code} — ${error.message}',
+          );
+          lastError = error.message;
+          continue;
+        }
+
+        throw BackendRequestException(
+          statusCode: response.statusCode,
+          error: error,
+        );
+      } on SocketException catch (e) {
+        if (attempt < config.maxRetries) {
+          debugPrint(
+            '[BackendClient] CreateSession network error '
+            '(attempt ${attempt + 1}): $e',
+          );
+          lastError = e.message;
+          continue;
+        }
+        throw BackendRequestException(
+          statusCode: 0,
+          error: BackendError(
+            code: 'network_error',
+            message: 'Connection failed after ${config.maxRetries} retries: '
+                '${e.message}',
+          ),
+        );
+      } on HttpException catch (e) {
+        if (attempt < config.maxRetries) {
+          debugPrint(
+            '[BackendClient] CreateSession HTTP error '
+            '(attempt ${attempt + 1}): $e',
+          );
+          lastError = e.message;
+          continue;
+        }
+        throw BackendRequestException(
+          statusCode: 0,
+          error: BackendError(
+            code: 'http_error',
+            message: 'HTTP error after ${config.maxRetries} retries: '
+                '${e.message}',
+          ),
+        );
+      }
+    }
+
+    throw BackendRequestException(
+      statusCode: 0,
+      error: BackendError(
+        code: 'max_retries_exceeded',
+        message: 'Max retries exceeded: $lastError',
+      ),
+    );
+  }
+
+  Future<FinishSessionResponse> finishSession(
+    String sessionId,
+    FinishSessionRequest request,
+  ) async {
+    final body = jsonEncode(request.toJson());
+    final uri = Uri.parse('${config.apiBase}/sessions/$sessionId/finish');
+
+    var lastError = '';
+    for (var attempt = 0; attempt <= config.maxRetries; attempt++) {
+      if (attempt > 0) {
+        await Future.delayed(config.retryBaseDelay * (1 << (attempt - 1)));
+      }
+
+      try {
+        final httpRequest = await _client.postUrl(uri);
+        httpRequest.headers.contentType = ContentType.json;
+        httpRequest.write(body);
+        final response = await httpRequest.close();
+        final responseBody = await utf8.decodeStream(response);
+
+        if (response.statusCode == 200) {
+          return FinishSessionResponse.fromJson(
+            jsonDecode(responseBody) as Map<String, dynamic>,
+          );
+        }
+
+        final error = BackendError.parse(responseBody);
+
+        if (error.isRetryable && attempt < config.maxRetries) {
+          debugPrint(
+            '[BackendClient] FinishSession retryable error '
+            '(attempt ${attempt + 1}): ${error.code} — ${error.message}',
+          );
+          lastError = error.message;
+          continue;
+        }
+
+        throw BackendRequestException(
+          statusCode: response.statusCode,
+          error: error,
+        );
+      } on SocketException catch (e) {
+        if (attempt < config.maxRetries) {
+          debugPrint(
+            '[BackendClient] FinishSession network error '
+            '(attempt ${attempt + 1}): $e',
+          );
+          lastError = e.message;
+          continue;
+        }
+        throw BackendRequestException(
+          statusCode: 0,
+          error: BackendError(
+            code: 'network_error',
+            message: 'Connection failed after ${config.maxRetries} retries: '
+                '${e.message}',
+          ),
+        );
+      } on HttpException catch (e) {
+        if (attempt < config.maxRetries) {
+          debugPrint(
+            '[BackendClient] FinishSession HTTP error '
+            '(attempt ${attempt + 1}): $e',
+          );
+          lastError = e.message;
+          continue;
+        }
+        throw BackendRequestException(
+          statusCode: 0,
+          error: BackendError(
+            code: 'http_error',
+            message: 'HTTP error after ${config.maxRetries} retries: '
+                '${e.message}',
+          ),
+        );
+      }
+    }
+
+    throw BackendRequestException(
+      statusCode: 0,
+      error: BackendError(
+        code: 'max_retries_exceeded',
+        message: 'Max retries exceeded: $lastError',
+      ),
+    );
+  }
+
   Future<List<EngineerEvent>> getEvents(
     String sessionId, {
     int? lapNumber,

@@ -6,6 +6,62 @@ import 'package:telemetry_one/core/backend/backend_config.dart';
 import 'package:telemetry_one/core/backend/telemetry_frame_dto.dart';
 
 void main() {
+  group('CreateSessionRequest toJson', () {
+    test('omits trackId when null', () {
+      final request = CreateSessionRequest(
+        source: 'flutter',
+        game: 'gt7',
+        platform: 'ps5',
+        driverAlias: 'alex',
+        startedUnixMs: 1720656000000,
+      );
+      final json = request.toJson();
+      expect(json.containsKey('trackId'), isFalse);
+    });
+
+    test('includes trackId when non-empty', () {
+      final request = CreateSessionRequest(
+        source: 'flutter',
+        game: 'gt7',
+        platform: 'ps5',
+        driverAlias: 'alex',
+        trackId: 'gt7_watkins_glen_international',
+        startedUnixMs: 1720656000000,
+      );
+      final json = request.toJson();
+      expect(json['trackId'], 'gt7_watkins_glen_international');
+    });
+
+    test('omits trackId when empty string', () {
+      final request = CreateSessionRequest(
+        source: 'flutter',
+        game: 'gt7',
+        platform: 'ps5',
+        driverAlias: 'alex',
+        trackId: '',
+        startedUnixMs: 1720656000000,
+      );
+      final json = request.toJson();
+      expect(json.containsKey('trackId'), isFalse);
+    });
+
+    test('always includes required fields', () {
+      final request = CreateSessionRequest(
+        source: 'flutter',
+        game: 'gt7',
+        platform: 'ps5',
+        driverAlias: 'alex',
+        startedUnixMs: 1720656000000,
+      );
+      final json = request.toJson();
+      expect(json['source'], 'flutter');
+      expect(json['game'], 'gt7');
+      expect(json['platform'], 'ps5');
+      expect(json['driverAlias'], 'alex');
+      expect(json['startedUnixMs'], 1720656000000);
+    });
+  });
+
   group('BackendClient', () {
     late HttpServer _server;
     late int _port;
@@ -216,6 +272,178 @@ void main() {
         expect(e.error.code, 'network_error');
       } finally {
         client.dispose();
+      }
+    });
+
+    test('createSession returns parsed response', () async {
+      final server2 = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final port2 = server2.port;
+
+      server2.listen((HttpRequest request) async {
+        final body = await utf8.decodeStream(request);
+        final json = jsonDecode(body) as Map<String, dynamic>;
+
+        request.response.statusCode = 200;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(jsonEncode({
+          'session': {
+            'id': 'session_01j2example',
+            'source': json['source'],
+            'game': json['game'],
+            'startedUnixMs': json['startedUnixMs'],
+          },
+        }));
+        request.response.close();
+      });
+
+      final client = BackendClient(
+        config: BackendConfig(baseUrl: 'http://127.0.0.1:$port2'),
+      );
+
+      final response = await client.createSession(
+        CreateSessionRequest(
+          source: 'flutter',
+          game: 'gt7',
+          platform: 'ps5',
+          driverAlias: 'alex',
+          trackId: 'gt7_watkins_glen_international',
+          startedUnixMs: 1720656000000,
+        ),
+      );
+
+      expect(response.sessionId, 'session_01j2example');
+      client.dispose();
+      await server2.close(force: true);
+    });
+
+    test('createSession throws on server error', () async {
+      final server2 = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final port2 = server2.port;
+
+      server2.listen((HttpRequest request) async {
+        request.response.statusCode = 500;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(jsonEncode({
+          'error': {
+            'code': 'internal_error',
+            'message': 'database error',
+          },
+        }));
+        request.response.close();
+      });
+
+      final client = BackendClient(
+        config: BackendConfig(baseUrl: 'http://127.0.0.1:$port2'),
+      );
+
+      try {
+        await client.createSession(
+          CreateSessionRequest(
+            source: 'flutter',
+            game: 'gt7',
+            platform: 'ps5',
+            driverAlias: 'alex',
+            startedUnixMs: 1720656000000,
+          ),
+        );
+        fail('Expected BackendRequestException');
+      } on BackendRequestException catch (e) {
+        expect(e.error.code, 'internal_error');
+        expect(e.error.message, 'database error');
+      } finally {
+        client.dispose();
+        await server2.close(force: true);
+      }
+    });
+
+    test('createSession throws on network error', () async {
+      final client = BackendClient(
+        config: BackendConfig(
+          baseUrl: 'http://127.0.0.1:1',
+        ),
+      );
+
+      try {
+        await client.createSession(CreateSessionRequest(
+          source: 'flutter',
+          game: 'gt7',
+          platform: 'ps5',
+          driverAlias: 'alex',
+          startedUnixMs: 1720656000000,
+        ));
+        fail('Expected BackendRequestException');
+      } on BackendRequestException catch (e) {
+        expect(e.error.code, 'network_error');
+      } finally {
+        client.dispose();
+      }
+    });
+
+    test('finishSession returns parsed response', () async {
+      final server2 = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final port2 = server2.port;
+
+      server2.listen((HttpRequest request) async {
+        final body = await utf8.decodeStream(request);
+        final json = jsonDecode(body) as Map<String, dynamic>;
+
+        request.response.statusCode = 200;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(jsonEncode({
+          'session': {
+            'id': 'session_01j2example',
+            'endedUnixMs': json['endedUnixMs'],
+          },
+          'status': 'finished',
+        }));
+        request.response.close();
+      });
+
+      final client = BackendClient(
+        config: BackendConfig(baseUrl: 'http://127.0.0.1:$port2'),
+      );
+
+      final response = await client.finishSession(
+        'session_01j2example',
+        FinishSessionRequest(endedUnixMs: 1720656000000),
+      );
+
+      expect(response.status, 'finished');
+      client.dispose();
+      await server2.close(force: true);
+    });
+
+    test('finishSession throws on server error', () async {
+      final server2 = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final port2 = server2.port;
+
+      server2.listen((HttpRequest request) async {
+        request.response.statusCode = 500;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(jsonEncode({
+          'error': {
+            'code': 'internal_error',
+            'message': 'session not found',
+          },
+        }));
+        request.response.close();
+      });
+
+      final client = BackendClient(
+        config: BackendConfig(baseUrl: 'http://127.0.0.1:$port2'),
+      );
+
+      try {
+        await client.finishSession(
+          'session_bad',
+          FinishSessionRequest(endedUnixMs: 1720656000000),
+        );
+        fail('Expected BackendRequestException');
+      } on BackendRequestException catch (e) {
+        expect(e.error.code, 'internal_error');
+      } finally {
+        client.dispose();
+        await server2.close(force: true);
       }
     });
 
