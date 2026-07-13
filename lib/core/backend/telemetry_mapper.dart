@@ -46,5 +46,5 @@ int computeBatchSize({
   int maxBatch = 600,
 }) {
   if (availableFrames <= 0) return 0;
-  return availableFrames.clamp(1, maxBatch).clamp(1, defaultBatch);
+  return availableFrames.clamp(1, defaultBatch).clamp(1, maxBatch);
 }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'backend_client.dart';
 import 'backend_config.dart';
 import 'telemetry_frame_dto.dart';
@@ -29,9 +30,12 @@ class BackendDataBridge {
     try {
       return await _client.getTrackDetection(sessionId);
     } on BackendRequestException catch (e) {
+      debugPrint('[BackendDataBridge] getTrackDetection error: '
+          '${e.error.code} — ${e.error.message}');
       if (e.error.isNotImplemented) return null;
       return null;
     } catch (_) {
+      debugPrint('[BackendDataBridge] getTrackDetection unexpected error');
       return null;
     }
   }
@@ -52,9 +56,12 @@ class BackendDataBridge {
         type: type,
       );
     } on BackendRequestException catch (e) {
+      debugPrint('[BackendDataBridge] getEvents error: '
+          '${e.error.code} — ${e.error.message}');
       if (e.error.isNotImplemented) return null;
       return null;
     } catch (_) {
+      debugPrint('[BackendDataBridge] getEvents unexpected error');
       return null;
     }
   }

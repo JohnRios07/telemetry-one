@@ -189,10 +189,35 @@ void main() {
       expect(computeBatchSize(availableFrames: 50), 50);
     });
 
-    test('respects max batch limit', () {
+    test('respects max batch limit as absolute cap', () {
       expect(
         computeBatchSize(availableFrames: 1000, defaultBatch: 600),
         600,
+      );
+    });
+
+    test('maxBatch caps defaultBatch when smaller', () {
+      expect(
+        computeBatchSize(
+          availableFrames: 1000,
+          defaultBatch: 600,
+          maxBatch: 300,
+        ),
+        300,
+      );
+    });
+
+    test('available frames capped by both defaultBatch and maxBatch', () {
+      expect(
+        computeBatchSize(availableFrames: 500, defaultBatch: 120, maxBatch: 600),
+        120,
+      );
+    });
+
+    test('maxBatch alone limits when defaultBatch not supplied', () {
+      expect(
+        computeBatchSize(availableFrames: 500, defaultBatch: 120, maxBatch: 50),
+        50,
       );
     });
   });

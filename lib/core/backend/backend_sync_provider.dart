@@ -98,6 +98,7 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
   StreamSubscription<Uint8List>? _subscription;
   final List<TelemetryData> _buffer = [];
   Timer? _flushTimer;
+  bool _isFlushing = false;
 
   BackendSyncNotifier({
     BackendClient? client,
@@ -142,9 +143,11 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
     } else if (!enabled && state.enabled) {
       _flushTimer?.cancel();
       _flushTimer = null;
+      _buffer.clear();
     }
     state = state.copyWith(
       status: enabled ? SyncStatus.idle : SyncStatus.disabled,
+      pendingFrames: enabled ? null : 0,
       consecutiveFailures: enabled ? 0 : null,
       lastRejection: null,
       clearError: enabled,
@@ -176,27 +179,46 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
     });
   }
 
-  void _flush() {
+  Future<void> _flush() async {
+    if (_isFlushing) return;
     if (_buffer.isEmpty) return;
+    _isFlushing = true;
 
-    final batch = List<TelemetryData>.from(_buffer);
-    _buffer.clear();
+    final batchSize = computeBatchSize(
+      availableFrames: _buffer.length,
+      defaultBatch: _config.defaultBatchSize,
+      maxBatch: _config.maxBatchSize,
+    );
 
-    final frames = mapTelemetryBatch(batch);
-    final jsonFrames = frames.map((f) => f.toJson()).toList();
+    List<TelemetryData> batch;
+    List<TelemetryFrameDto> frames;
+    List<Map<String, dynamic>> jsonFrames;
+
+    if (batchSize <= 0) {
+      _isFlushing = false;
+      return;
+    }
+
+    batch = List<TelemetryData>.from(_buffer.take(batchSize));
+    _buffer.removeRange(0, batchSize);
+
+    frames = mapTelemetryBatch(batch);
+    jsonFrames = frames.map((f) => f.toJson()).toList();
 
     state = state.copyWith(
       status: SyncStatus.syncing,
       pendingFrames: frames.length,
     );
 
-    _client
-        .postFrameBatch(state.sessionId, jsonFrames)
-        .then((response) {
+    try {
+      final response = await _client.postFrameBatch(
+        state.sessionId,
+        jsonFrames,
+      );
       final now = DateTime.now();
       state = state.copyWith(
         status: SyncStatus.idle,
-        pendingFrames: 0,
+        pendingFrames: _buffer.length,
         totalSent: state.totalSent + response.receivedFrames,
         totalAccepted: state.totalAccepted + response.acceptedFrames,
         totalRejected: state.totalRejected + response.rejectedFrames,
@@ -212,40 +234,34 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
         'accepted: ${response.acceptedFrames}, '
         'rejected: ${response.rejectedFrames}',
       );
-    }).catchError((Object error) {
+    } on BackendRequestException catch (e) {
       final now = DateTime.now();
-
-      if (error is BackendRequestException &&
-          error.error.details != null &&
-          error.error.isBadRequest) {
+      if (e.error.details != null && e.error.isBadRequest) {
         // Typed validation rejection: drop frames, do NOT retry
         state = state.copyWith(
           status: SyncStatus.rejected,
           pendingFrames: 0,
-          totalRejected: state.totalRejected + frames.length,
+          totalRejected: state.totalRejected + batch.length,
           consecutiveFailures: 0,
-          lastRejection: error.error.details,
-          lastErrorMessage: error.error.message,
+          lastRejection: e.error.details,
+          lastErrorMessage: e.error.message,
           lastErrorAt: now,
         );
         debugPrint(
-          '[BackendSync] Rejected ${frames.length} frames: '
-          '${error.error.code} — ${error.error.message}',
+          '[BackendSync] Rejected ${batch.length} frames: '
+          '${e.error.code} — ${e.error.message}',
         );
       } else {
-        // Network or server error after all retries: buffer frames, degrade
+        // Network or server error: buffer frames in chronological order
         _buffer.insertAll(0, batch);
         _trimBuffer();
         if (state.status != SyncStatus.failed) {
-          final message = error is BackendRequestException
-              ? error.error.message
-              : error.toString();
           state = state.copyWith(
             status: SyncStatus.degraded,
             pendingFrames: _buffer.length,
             consecutiveFailures: state.consecutiveFailures + 1,
             lastRejection: null,
-            lastErrorMessage: message,
+            lastErrorMessage: e.error.message,
             lastErrorAt: now,
           );
         }
@@ -254,7 +270,26 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
           'buffered ${batch.length} frames',
         );
       }
-    });
+    } on Object catch (e) {
+      _buffer.insertAll(0, batch);
+      _trimBuffer();
+      if (state.status != SyncStatus.failed) {
+        state = state.copyWith(
+          status: SyncStatus.degraded,
+          pendingFrames: _buffer.length,
+          consecutiveFailures: state.consecutiveFailures + 1,
+          lastRejection: null,
+          lastErrorMessage: e.toString(),
+          lastErrorAt: DateTime.now(),
+        );
+      }
+      debugPrint(
+        '[BackendSync] Flush error — '
+        'buffered ${batch.length} frames',
+      );
+    } finally {
+      _isFlushing = false;
+    }
   }
 
   void _trimBuffer() {
