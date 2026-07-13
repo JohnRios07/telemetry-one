@@ -169,7 +169,7 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
         '[BackendSync] Finish session error (non-fatal): '
         '${e.error.code} — ${e.error.message}',
       );
-    } on Object catch (e) {
+    } on Exception catch (e) {
       debugPrint('[BackendSync] Finish session unexpected error: $e');
     }
   }
@@ -191,6 +191,11 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
   Future<void> setEnabled(bool enabled) async {
     if (enabled && !state.enabled) {
       await _ensureBackendSession();
+      // Guard: if V2 is enabled and setEnabled(false) was called during the
+      // HTTP gap, alignmentStatus was reset to none — don't start flush timer.
+      if (_config.useV2Data && state.alignmentStatus == SessionAlignmentStatus.none) {
+        return;
+      }
       _startFlushTimer();
     } else if (!enabled && state.enabled) {
       await _finishBackendSession();
@@ -233,6 +238,8 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
         ),
       );
 
+      // Guard: disable won during async gap — don't adopt this session
+      if (state.alignmentStatus != SessionAlignmentStatus.pending) return;
       state = state.copyWith(
         backendSessionId: response.sessionId,
         alignmentStatus: SessionAlignmentStatus.created,
@@ -248,7 +255,7 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
         '[BackendSync] Session creation failed (continuing with local ID): '
         '${e.error.code} — ${e.error.message}',
       );
-    } on Object catch (e) {
+    } on Exception catch (e) {
       state = state.copyWith(
         alignmentStatus: SessionAlignmentStatus.failed,
       );
@@ -374,7 +381,7 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
           'buffered ${batch.length} frames',
         );
       }
-    } on Object catch (e) {
+    } on Exception catch (e) {
       _buffer.insertAll(0, batch);
       _trimBuffer();
       if (state.status != SyncStatus.failed) {

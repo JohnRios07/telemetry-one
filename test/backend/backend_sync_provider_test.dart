@@ -743,6 +743,97 @@ void main() {
     });
   });
 
+    group('V2 disable wins race against in-flight createSession', () {
+    test('disable during createSession HTTP gap keeps sync disabled', () async {
+      final controller = _ControllableCreateMockClient();
+      final config = BackendConfig(
+        useV2Data: true,
+        defaultBatchSize: 1,
+        maxRetries: 0,
+        retryBaseDelay: Duration.zero,
+      );
+      final notifier = BackendSyncNotifier(
+        client: controller,
+        parser: MockTelemetryParser(),
+        config: config,
+      );
+
+      // Step 1: enable — createSession starts but won't complete until we release
+      final enableFuture = notifier.setEnabled(true);
+
+      expect(notifier.state.alignmentStatus, SessionAlignmentStatus.pending);
+      expect(controller.pendingCreateCount, 1);
+
+      // Step 2: disable while createSession is in-flight
+      await notifier.setEnabled(false);
+
+      expect(notifier.state.status, SyncStatus.disabled);
+      expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+      expect(notifier.state.backendSessionId, isNull);
+
+      // Step 3: complete the in-flight createSession
+      controller.completePendingCreate();
+
+      // Allow the continuations to run
+      await Future<void>.delayed(Duration.zero);
+      await enableFuture;
+
+      // Step 4: assert sync is still disabled — race was won by disable
+      expect(notifier.state.status, SyncStatus.disabled);
+      expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+      expect(notifier.state.backendSessionId, isNull);
+      expect(notifier.state.enabled, isFalse);
+
+      // No flush timer should be active — inject a packet and see it ignored
+      notifier.injectPacket(Uint8List(1));
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.batchCallCount, 0);
+    });
+
+    test('enable after disable race still works fresh', () async {
+      final controller = _ControllableCreateMockClient();
+      final config = BackendConfig(
+        useV2Data: true,
+        defaultBatchSize: 1,
+        maxRetries: 0,
+        retryBaseDelay: Duration.zero,
+      );
+      final notifier = BackendSyncNotifier(
+        client: controller,
+        parser: MockTelemetryParser(),
+        config: config,
+      );
+
+      // Don't await enableFuture — let it race naturally
+      notifier.setEnabled(true);
+      await notifier.setEnabled(false);
+      controller.completePendingCreate();
+      // Drain microtasks so the guard returns
+      await Future<void>.delayed(Duration.zero);
+
+      // Assert disable won the race
+      expect(notifier.state.status, SyncStatus.disabled);
+      expect(notifier.state.backendSessionId, isNull);
+      expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+
+      // Fresh enable with a separate notifier/mock
+      // Don't await — let it block on HTTP, then complete the pending call
+      final controller2 = _ControllableCreateMockClient();
+      final notifier2 = BackendSyncNotifier(
+        client: controller2,
+        parser: MockTelemetryParser(),
+        config: config,
+      );
+      notifier2.setEnabled(true);
+      controller2.completePendingCreate();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier2.state.status, SyncStatus.idle);
+      expect(notifier2.state.backendSessionId, 'session_backend_test_1');
+      expect(notifier2.state.alignmentStatus, SessionAlignmentStatus.created);
+    });
+  });
+
   group('V2 session alignment', () {
     group('V2 disabled (default) — no alignment', () {
       test('setEnabled does not attempt backend session creation', () async {
@@ -1205,6 +1296,49 @@ class _SessionCreateFailMockClient extends BackendClient {
     List<Map<String, dynamic>> frames,
   ) async {
     lastBatchSessionId = sessionId;
+    return IngestResponse(
+      sessionId: sessionId,
+      receivedFrames: frames.length,
+      acceptedFrames: frames.length,
+      rejectedFrames: 0,
+      acceptedFromUnixMs: 1,
+      acceptedToUnixMs: 100,
+      status: 'accepted',
+    );
+  }
+}
+
+/// Mock that holds createSession until [completePendingCreate] is called.
+class _ControllableCreateMockClient extends BackendClient {
+  int pendingCreateCount = 0;
+  int batchCallCount = 0;
+  Completer<CreateSessionResponse>? _createCompleter;
+
+  _ControllableCreateMockClient({BackendConfig? config}) : super(config: config);
+
+  @override
+  Future<CreateSessionResponse> createSession(
+    CreateSessionRequest request,
+  ) async {
+    pendingCreateCount++;
+    _createCompleter = Completer<CreateSessionResponse>();
+    return _createCompleter!.future;
+  }
+
+  void completePendingCreate() {
+    if (_createCompleter != null && !_createCompleter!.isCompleted) {
+      _createCompleter!.complete(
+        CreateSessionResponse(sessionId: 'session_backend_test_1'),
+      );
+    }
+  }
+
+  @override
+  Future<IngestResponse> postFrameBatch(
+    String sessionId,
+    List<Map<String, dynamic>> frames,
+  ) async {
+    batchCallCount++;
     return IngestResponse(
       sessionId: sessionId,
       receivedFrames: frames.length,
