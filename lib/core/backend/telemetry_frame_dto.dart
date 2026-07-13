@@ -217,7 +217,11 @@ class BackendError {
   bool get isBadRequest => code == 'bad_request';
   bool get isNotImplemented => code == 'not_implemented';
   bool get isInternalError => code == 'internal_error';
-  bool get isRetryable => code == 'internal_error' || code == 'service_unavailable';
+  bool get isSessionNotFound => code == 'session_not_found';
+  bool get isSessionFinished => code == 'session_finished';
+  bool get isRetryable =>
+    code == 'internal_error' ||
+    code == 'service_unavailable';
 
   factory BackendError.fromJson(Map<String, dynamic> json) {
     final error = json['error'] as Map<String, dynamic>;
