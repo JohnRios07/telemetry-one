@@ -93,6 +93,41 @@ class FrameBatchRequest {
   };
 }
 
+class RejectionReasonCount {
+  final String code;
+  final int count;
+
+  const RejectionReasonCount({
+    required this.code,
+    required this.count,
+  });
+
+  factory RejectionReasonCount.fromJson(Map<String, dynamic> json) {
+    return RejectionReasonCount(
+      code: json['code'] as String,
+      count: (json['count'] as num).toInt(),
+    );
+  }
+}
+
+class RejectionSummary {
+  final List<RejectionReasonCount> reasons;
+
+  String? get topReasonCode =>
+      reasons.isNotEmpty ? reasons.first.code : null;
+
+  const RejectionSummary({required this.reasons});
+
+  factory RejectionSummary.fromJson(Map<String, dynamic> json) {
+    final reasonsList = (json['reasons'] as List<dynamic>?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
+    return RejectionSummary(
+      reasons: reasonsList.map(RejectionReasonCount.fromJson).toList(),
+    );
+  }
+}
+
 class IngestResponse {
   final String sessionId;
   final int receivedFrames;
@@ -101,6 +136,7 @@ class IngestResponse {
   final int acceptedFromUnixMs;
   final int acceptedToUnixMs;
   final String status;
+  final RejectionSummary? rejectionSummary;
 
   const IngestResponse({
     required this.sessionId,
@@ -110,9 +146,12 @@ class IngestResponse {
     required this.acceptedFromUnixMs,
     required this.acceptedToUnixMs,
     required this.status,
+    this.rejectionSummary,
   });
 
   bool get isAccepted => status == 'accepted';
+  bool get hasRejections => rejectedFrames > 0 && rejectionSummary != null;
+  String? get topRejectionCode => rejectionSummary?.topReasonCode;
 
   factory IngestResponse.fromJson(Map<String, dynamic> json) {
     return IngestResponse(
@@ -123,6 +162,10 @@ class IngestResponse {
       acceptedFromUnixMs: (json['acceptedFromUnixMs'] as num).toInt(),
       acceptedToUnixMs: (json['acceptedToUnixMs'] as num).toInt(),
       status: json['status'] as String,
+      rejectionSummary: json['rejectionSummary'] != null
+          ? RejectionSummary.fromJson(
+              json['rejectionSummary'] as Map<String, dynamic>)
+          : null,
     );
   }
 }

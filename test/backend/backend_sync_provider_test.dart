@@ -200,6 +200,87 @@ void main() {
     });
   });
 
+  group('Partial success with rejection summary', () {
+    test('sets lastRejectionCode from response summary', () async {
+      final client = _buildMockClient((frames) async {
+        return IngestResponse(
+          sessionId: 'test',
+          receivedFrames: frames.length,
+          acceptedFrames: frames.length - 1,
+          rejectedFrames: 1,
+          acceptedFromUnixMs: 1,
+          acceptedToUnixMs: 100,
+          status: 'partial',
+          rejectionSummary: const RejectionSummary(reasons: [
+            RejectionReasonCount(code: 'invalid_throttle', count: 1),
+          ]),
+        );
+      });
+
+      final notifier = BackendSyncNotifier(
+        client: client,
+        parser: MockTelemetryParser(),
+        config: _testConfig(),
+      );
+
+      await notifier.setEnabled(true);
+
+      notifier.injectPacket(Uint8List(1));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.state.status, SyncStatus.idle);
+      expect(notifier.state.totalRejected, 1);
+      expect(notifier.state.totalAccepted, 0);
+      expect(notifier.state.lastRejectionCode, 'invalid_throttle');
+    });
+
+    test('success without rejection clears lastRejectionCode', () async {
+      var callIndex = 0;
+      final client = _buildMockClient((frames) async {
+        callIndex++;
+        if (callIndex == 1) {
+          return IngestResponse(
+            sessionId: 'test',
+            receivedFrames: frames.length,
+            acceptedFrames: frames.length - 1,
+            rejectedFrames: 1,
+            acceptedFromUnixMs: 1,
+            acceptedToUnixMs: 100,
+            status: 'partial',
+            rejectionSummary: const RejectionSummary(reasons: [
+              RejectionReasonCount(code: 'invalid_throttle', count: 1),
+            ]),
+          );
+        }
+        return IngestResponse(
+          sessionId: 'test',
+          receivedFrames: frames.length,
+          acceptedFrames: frames.length,
+          rejectedFrames: 0,
+          acceptedFromUnixMs: 1,
+          acceptedToUnixMs: 100,
+          status: 'accepted',
+        );
+      });
+
+      final notifier = BackendSyncNotifier(
+        client: client,
+        parser: MockTelemetryParser(),
+        config: _testConfig(),
+      );
+
+      await notifier.setEnabled(true);
+
+      notifier.injectPacket(Uint8List(1));
+      await Future<void>.delayed(Duration.zero);
+      expect(notifier.state.lastRejectionCode, 'invalid_throttle');
+
+      notifier.injectPacket(Uint8List(2));
+      await Future<void>.delayed(Duration.zero);
+      expect(notifier.state.lastRejectionCode, isNull);
+    });
+  });
+
   group('Typed rejection (4xx with details)', () {
     test('transitions to rejected, frames dropped, not retried', () async {
       final rejectionDetails = IngestRejection(

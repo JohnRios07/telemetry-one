@@ -56,6 +56,8 @@ flutter-v2-smoke
 3. Enable backend sync: tap the power icon (⏻) in the **V2 sync badge** located in the HeaderBar next to the RECORD/STOP button
    - Badge shows: status dot + label (OFF/IDLE/SYNC/DOWN/REJ/FAIL)
    - When enabled, the badge expands to show the effective session ID and frame counters (P: pending, S: sent, A: accepted, R: rejected)
+   - When R is non-zero, the top rejection reason code appears next to R (e.g. `R:2 invalid_throttle`)
+   - The rejection code clears on the next successful flush with no rejections
 4. **Check Flutter console logs** for:
    - `[BackendSync] Backend session created: session_*`
    - Frame batches posted to the backend
@@ -169,7 +171,7 @@ lib/core/backend/backend_sync_provider.dart
 1. **Is telemetry arriving?** Dashboard shows live data (speed, RPM, gear)
 2. **Is sync enabled?** V2 sync badge in HeaderBar shows status dot + label; counters increment
 3. **Session ID format** — badge shows `session_abc12…` (shortened) or check Flutter console for full ID
-4. **Accepted vs rejected frames** — badge shows `P:0 S:5 A:5 R:0` counters; non-zero A, zero or low R
+4. **Accepted vs rejected frames** — badge shows `P:0 S:5 A:5 R:0` counters; non-zero A, zero or low R. When R is non-zero, the rejection code (e.g. `invalid_throttle`) appears next to the R count — inspect to understand why frames are being rejected
 5. **Finish called on stop** — tap power icon to disable; console shows `Finished backend session`
 6. **Postgres healthy** — containers running, session data persisted
 

@@ -77,7 +77,8 @@ class V2SyncBadge extends ConsumerWidget {
               'P:${syncState.pendingFrames} '
               'S:${syncState.totalSent} '
               'A:${syncState.totalAccepted} '
-              'R:${syncState.totalRejected}',
+              'R:${syncState.totalRejected}'
+              '${syncState.lastRejectionCode != null ? ' ${syncState.lastRejectionCode}' : ''}',
               style: AppTypography.inter(
                 size: 8,
                 color: AppColors.textDim,
