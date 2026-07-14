@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/backend/backend_sync_provider.dart';
 import '../../../core/models/telemetry_data.dart';
 import '../../../../config/theme/app_colors.dart';
 import '../../../../config/theme/app_typography.dart';
@@ -37,6 +38,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ref.read(telemetryBufferProvider.notifier).add(data.throttle, data.brake);
         ref.read(trackHistoryProvider.notifier).ingest(data);
         ref.read(sessionRecorderProvider.notifier).recordPoint(data);
+        ref.read(backendSyncProvider.notifier).recordData(data);
       },
       fireImmediately: true,
     );

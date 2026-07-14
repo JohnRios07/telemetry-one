@@ -57,7 +57,7 @@ class TelemetryFrameDto {
       'gear': gear,
       'throttle': throttle,
       'brake': brake,
-      'steeringAngle': steeringAngle,
+      'steering': steeringAngle,
       'fuelLiters': fuelLiters,
       'positionX': positionX,
       'positionY': positionY,

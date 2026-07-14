@@ -205,6 +205,10 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
           _startFlushTimer();
         }
       } else if (!enabled && state.enabled) {
+        state = state.copyWith(status: SyncStatus.disabled);
+        if (_buffer.isNotEmpty) {
+          await _flush();
+        }
         try {
           await _finishBackendSession();
         } finally {
@@ -284,20 +288,30 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
     }
   }
 
-  @visibleForTesting
-  void injectPacket(Uint8List bytes) => _onPacket(bytes);
-
-  void _onPacket(Uint8List bytes) {
+  /// Feed already-parsed telemetry data into the sync buffer.
+  ///
+  /// No-op when sync is disabled. When enabled, adds [data] to the
+  /// internal buffer and triggers a flush when the batch threshold is reached.
+  /// Reuses the existing flush reentrancy guard — safe to call from
+  /// any consumer (UDP stream or dashboard listener).
+  void recordData(TelemetryData data) {
     if (state.status == SyncStatus.disabled) return;
-
-    final data = _parser.parse(bytes);
-    if (data == null) return;
 
     _buffer.add(data);
 
     if (_buffer.length >= _config.defaultBatchSize) {
       _flush();
     }
+  }
+
+  @visibleForTesting
+  void injectPacket(Uint8List bytes) => _onPacket(bytes);
+
+  void _onPacket(Uint8List bytes) {
+    final data = _parser.parse(bytes);
+    if (data == null) return;
+
+    recordData(data);
   }
 
   void _startFlushTimer() {
@@ -335,6 +349,8 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
     frames = mapTelemetryBatch(batch);
     jsonFrames = frames.map((f) => f.toJson()).toList();
 
+    final capturedSessionId = state.effectiveSessionId;
+
     state = state.copyWith(
       status: SyncStatus.syncing,
       pendingFrames: frames.length,
@@ -342,7 +358,7 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
 
     try {
       final response = await _client.postFrameBatch(
-        state.effectiveSessionId,
+        capturedSessionId,
         jsonFrames,
       );
       final now = DateTime.now();
@@ -366,7 +382,7 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
       );
     } on BackendRequestException catch (e) {
       final now = DateTime.now();
-      if (e.error.details != null && e.error.isBadRequest) {
+      if (e.error.isBadRequest) {
         // Typed validation rejection: drop frames, do NOT retry
         state = state.copyWith(
           status: SyncStatus.rejected,
@@ -444,8 +460,26 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
   }
 }
 
+/// Reads backend config from `--dart-define` environment overrides.
+///
+/// Supported defines:
+/// - `backend_base_url` — overrides [BackendConfig.baseUrl]
+/// - `use_v2_data` — `"true"` enables V2 data mode (default: `false`)
+///
+/// When a define is not provided, the default from [BackendConfig] is used.
+/// This ensures production safety: no hardcoded testing URL leaks.
+@visibleForTesting
+BackendConfig createBackendConfigFromEnv() {
+  const envBaseUrl = String.fromEnvironment('backend_base_url');
+  const envUseV2Data = String.fromEnvironment('use_v2_data');
+  return BackendConfig(
+    baseUrl: envBaseUrl.isNotEmpty ? envBaseUrl : BackendConfig().baseUrl,
+    useV2Data: envUseV2Data == 'true',
+  );
+}
+
 final backendConfigProvider = Provider<BackendConfig>((ref) {
-  return const BackendConfig();
+  return createBackendConfigFromEnv();
 });
 
 final backendClientProvider = Provider<BackendClient>((ref) {

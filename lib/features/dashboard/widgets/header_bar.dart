@@ -8,6 +8,7 @@ import '../../../../config/theme/app_typography.dart';
 import '../../engineer/screens/engineer_sessions_screen.dart';
 import '../providers/session_provider.dart';
 import '../providers/telemetry_provider.dart';
+import 'v2_sync_badge.dart';
 
 /// Top header bar with logo, live indicator, lap info, and status.
 class HeaderBar extends ConsumerStatefulWidget {
@@ -149,6 +150,10 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
           ),
 
           const SizedBox(width: 18),
+
+          const V2SyncBadge(),
+
+          const SizedBox(width: 12),
 
           Expanded(
             child: Text(
