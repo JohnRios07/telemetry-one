@@ -377,7 +377,7 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
         totalRejected: state.totalRejected + response.rejectedFrames,
         consecutiveFailures: 0,
         lastRejection: null,
-        lastRejectionCode: response.topRejectionCode,
+        lastRejectionCode: response.topRejectionCode ?? state.lastRejectionCode,
         lastErrorMessage: null,
         lastSyncAt: now,
         clearError: true,
