@@ -1614,6 +1614,163 @@ void main() {
       });
     });
   });
+
+  group('Session not found realignment', () {
+    test('session_not_found clears stale alignment, creates new session, retries batch',
+        () async {
+      final client = _SessionNotFoundMockClient(
+        config: BackendConfig(maxRetries: 0, retryBaseDelay: Duration.zero),
+      );
+      final config = BackendConfig(
+        useV2Data: true,
+        defaultBatchSize: 1,
+        maxRetries: 0,
+        retryBaseDelay: Duration.zero,
+      );
+      final notifier = BackendSyncNotifier(
+        client: client,
+        parser: MockTelemetryParser(),
+        config: config,
+      );
+
+      await notifier.setEnabled(true);
+      expect(notifier.state.backendSessionId, 'session_backend_test_1');
+      expect(notifier.state.alignmentStatus, SessionAlignmentStatus.created);
+
+      notifier.injectPacket(Uint8List(1));
+      await Future<void>.delayed(Duration.zero);
+      expect(notifier.state.totalAccepted, 1);
+      expect(client.lastBatchSessionId, 'session_backend_test_1');
+      expect(client.batchCallCount, 1);
+
+      notifier.injectPacket(Uint8List(2));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(client.createCallCount, 2);
+      expect(notifier.state.backendSessionId, 'session_backend_test_2');
+      expect(notifier.state.alignmentStatus, SessionAlignmentStatus.created);
+      expect(notifier.state.status, SyncStatus.idle);
+      expect(client.lastBatchSessionId, 'session_backend_test_2');
+      expect(notifier.state.totalAccepted, 2);
+    });
+
+    test('session_not_found with realignment failure degrades and drops stale id',
+        () async {
+      final client = _SessionNotFoundThenCreateFailMockClient(
+        config: BackendConfig(maxRetries: 0, retryBaseDelay: Duration.zero),
+      );
+      final config = BackendConfig(
+        useV2Data: true,
+        defaultBatchSize: 1,
+        maxRetries: 0,
+        retryBaseDelay: Duration.zero,
+      );
+      final notifier = BackendSyncNotifier(
+        client: client,
+        parser: MockTelemetryParser(),
+        config: config,
+      );
+
+      await notifier.setEnabled(true);
+      expect(notifier.state.alignmentStatus, SessionAlignmentStatus.failed);
+      expect(notifier.state.backendSessionId, isNull);
+      expect(notifier.state.effectiveSessionId, startsWith('local_'));
+
+      notifier.injectPacket(Uint8List(1));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.state.status, SyncStatus.degraded);
+      expect(notifier.state.backendSessionId, isNull);
+      expect(client.createCallCount, 2);
+      expect(notifier.state.pendingFrames, greaterThan(0));
+    });
+
+    test('existing bad_request rejection still works alongside new codes',
+        () async {
+      final rejectionDetails = IngestRejection(
+        rejectionCode: 'invalid_throttle',
+        category: 'frame',
+        field: 'throttle',
+        frameIndex: 0,
+      );
+      final mockClient = _RejectionMockClient(rejectionDetails);
+      final notifier = BackendSyncNotifier(
+        client: mockClient,
+        parser: MockTelemetryParser(),
+        config: _testConfig(),
+      );
+
+      await notifier.setEnabled(true);
+
+      notifier.injectPacket(Uint8List(0));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.state.status, SyncStatus.rejected);
+      expect(notifier.state.lastRejection, isNotNull);
+      expect(notifier.state.lastRejection!.rejectionCode, 'invalid_throttle');
+      expect(notifier.state.pendingFrames, 0);
+      expect(notifier.state.totalRejected, 1);
+    });
+  });
+
+  group('Session finished terminal handling', () {
+    test('session_finished drops frames as terminal without re-buffering',
+        () async {
+      final client = _SessionFinishedMockClient(
+        config: BackendConfig(maxRetries: 0, retryBaseDelay: Duration.zero),
+      );
+      final notifier = BackendSyncNotifier(
+        client: client,
+        parser: MockTelemetryParser(),
+        config: _testConfig(),
+      );
+
+      await notifier.setEnabled(true);
+
+      notifier.injectPacket(Uint8List(1));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.state.status, SyncStatus.rejected);
+      expect(notifier.state.pendingFrames, 0,
+          reason: 'frames must NOT be re-buffered for finished session');
+      expect(notifier.state.totalRejected, 1);
+      expect(notifier.state.consecutiveFailures, 0,
+          reason: 'consecutiveFailures should not increment (non-retryable)');
+      expect(notifier.state.lastRejectionCode, 'session_finished');
+      expect(notifier.state.lastErrorMessage, contains('finished'));
+    });
+
+    test('session_finished does not re-buffer across multiple flushes',
+        () async {
+      final client = _SessionFinishedMockClient(
+        config: BackendConfig(maxRetries: 0, retryBaseDelay: Duration.zero),
+      );
+      final config = BackendConfig(
+        defaultBatchSize: 1,
+        maxRetries: 0,
+        retryBaseDelay: Duration.zero,
+      );
+      final notifier = BackendSyncNotifier(
+        client: client,
+        parser: MockTelemetryParser(),
+        config: config,
+      );
+
+      await notifier.setEnabled(true);
+
+      // Inject one frame at a time to let each flush complete
+      for (var i = 0; i < 3; i++) {
+        notifier.injectPacket(Uint8List(i));
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(notifier.state.status, SyncStatus.rejected);
+      expect(notifier.state.pendingFrames, 0,
+          reason: 'no frames should accumulate in buffer');
+      expect(notifier.state.totalRejected, 3);
+      expect(client.batchCallCount, 3);
+    });
+  });
 }
 
 /// Test helpers — internal mock client implementations.
@@ -2045,6 +2202,117 @@ class _BadRequestNoDetailsMockClient extends BackendClient {
       error: const BackendError(
         code: 'bad_request',
         message: 'invalid JSON body: unknown field "steeringAngle"',
+      ),
+    );
+  }
+}
+
+/// Mock where batch call at [failBatchIndex] (1-indexed) throws session_not_found.
+/// Other batch calls succeed. createSession always succeeds.
+class _SessionNotFoundMockClient extends BackendClient {
+  int createCallCount = 0;
+  int batchCallCount = 0;
+  int failBatchIndex = 2;
+  String? lastBatchSessionId;
+
+  _SessionNotFoundMockClient({BackendConfig? config}) : super(config: config);
+
+  @override
+  Future<CreateSessionResponse> createSession(
+    CreateSessionRequest request,
+  ) async {
+    createCallCount++;
+    return CreateSessionResponse(
+      sessionId: 'session_backend_test_$createCallCount',
+    );
+  }
+
+  @override
+  Future<IngestResponse> postFrameBatch(
+    String sessionId,
+    List<Map<String, dynamic>> frames,
+  ) async {
+    batchCallCount++;
+    lastBatchSessionId = sessionId;
+    if (batchCallCount == failBatchIndex) {
+      throw BackendRequestException(
+        statusCode: 404,
+        error: const BackendError(
+          code: 'session_not_found',
+          message: 'Session not found',
+        ),
+      );
+    }
+    return IngestResponse(
+      sessionId: sessionId,
+      receivedFrames: frames.length,
+      acceptedFrames: frames.length,
+      rejectedFrames: 0,
+      acceptedFromUnixMs: 1,
+      acceptedToUnixMs: 100,
+      status: 'accepted',
+    );
+  }
+}
+
+/// Mock that always returns session_finished on frame ingest.
+class _SessionFinishedMockClient extends BackendClient {
+  int batchCallCount = 0;
+
+  _SessionFinishedMockClient({BackendConfig? config}) : super(config: config);
+
+  @override
+  Future<IngestResponse> postFrameBatch(
+    String sessionId,
+    List<Map<String, dynamic>> frames,
+  ) async {
+    batchCallCount++;
+    throw BackendRequestException(
+      statusCode: 409,
+      error: const BackendError(
+        code: 'session_finished',
+        message: 'Session is already finished',
+      ),
+    );
+  }
+}
+
+/// Mock where createSession always fails (realignment cannot recover).
+/// All batch calls throw session_not_found.
+class _SessionNotFoundThenCreateFailMockClient extends BackendClient {
+  int createCallCount = 0;
+  int batchCallCount = 0;
+  String? lastBatchSessionId;
+
+  _SessionNotFoundThenCreateFailMockClient({BackendConfig? config})
+    : super(config: config);
+
+  @override
+  Future<CreateSessionResponse> createSession(
+    CreateSessionRequest request,
+  ) async {
+    createCallCount++;
+    throw BackendRequestException(
+      statusCode: 0,
+      error: const BackendError(
+        code: 'network_error',
+        message: 'Connection failed',
+      ),
+    );
+  }
+
+  @override
+  Future<IngestResponse> postFrameBatch(
+    String sessionId,
+    List<Map<String, dynamic>> frames,
+  ) async {
+    batchCallCount++;
+    lastBatchSessionId = sessionId;
+    throw BackendRequestException(
+      statusCode: 404,
+      error: const BackendError(
+        code: 'session_not_found',
+        message: 'Session not found',
       ),
     );
   }

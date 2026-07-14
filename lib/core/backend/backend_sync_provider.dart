@@ -406,6 +406,114 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
           '[BackendSync] Rejected ${batch.length} frames: '
           '${e.error.code} — ${e.error.message}',
         );
+      } else if (e.error.isSessionNotFound) {
+        // Backend session not found — clear stale alignment and re-establish
+        state = state.copyWith(
+          backendSessionId: null,
+          alignmentStatus: SessionAlignmentStatus.none,
+        );
+        await _ensureBackendSession();
+        if (state.alignmentStatus == SessionAlignmentStatus.created) {
+          try {
+            final retryResponse = await _client.postFrameBatch(
+              state.effectiveSessionId,
+              jsonFrames,
+            );
+            state = state.copyWith(
+              status: SyncStatus.idle,
+              pendingFrames: _buffer.length,
+              totalSent: state.totalSent + retryResponse.receivedFrames,
+              totalAccepted: state.totalAccepted + retryResponse.acceptedFrames,
+              totalRejected: state.totalRejected + retryResponse.rejectedFrames,
+              consecutiveFailures: 0,
+              lastRejection: null,
+              lastRejectionCode: retryResponse.topRejectionCode ?? state.lastRejectionCode,
+              lastErrorMessage: null,
+              lastSyncAt: DateTime.now(),
+              clearError: true,
+              lastErrorAt: null,
+            );
+            debugPrint(
+              '[BackendSync] Re-aligned session — '
+              'retry accepted ${retryResponse.acceptedFrames}/'
+              '${retryResponse.receivedFrames} frames under '
+              '${state.effectiveSessionId}',
+            );
+            _isFlushing = false;
+            return;
+          } on BackendRequestException catch (retryError) {
+            if (retryError.error.isBadRequest) {
+              state = state.copyWith(
+                status: SyncStatus.rejected,
+                pendingFrames: 0,
+                totalRejected: state.totalRejected + batch.length,
+                consecutiveFailures: 0,
+                lastRejection: retryError.error.details,
+                lastErrorMessage: retryError.error.message,
+                lastErrorAt: DateTime.now(),
+              );
+              debugPrint(
+                '[BackendSync] Re-aligned but retry rejected: '
+                '${retryError.error.code}',
+              );
+              _isFlushing = false;
+              return;
+            }
+            if (retryError.error.isSessionFinished) {
+              state = state.copyWith(
+                status: SyncStatus.rejected,
+                pendingFrames: 0,
+                totalRejected: state.totalRejected + batch.length,
+                consecutiveFailures: 0,
+                lastRejection: null,
+                lastRejectionCode: 'session_finished',
+                lastErrorMessage: retryError.error.message,
+                lastErrorAt: DateTime.now(),
+              );
+              debugPrint(
+                '[BackendSync] Re-aligned but session finished: '
+                '${retryError.error.message}',
+              );
+              _isFlushing = false;
+              return;
+            }
+            // Retry failed with other error — fall through to re-buffer
+          }
+        }
+        _buffer.insertAll(0, batch);
+        _trimBuffer();
+        if (state.status != SyncStatus.failed) {
+          state = state.copyWith(
+            status: SyncStatus.degraded,
+            pendingFrames: _buffer.length,
+            consecutiveFailures: state.consecutiveFailures + 1,
+            lastRejection: null,
+            lastErrorMessage: e.error.message,
+            lastErrorAt: now,
+          );
+        }
+        debugPrint(
+          '[BackendSync] Flush error — '
+          'session_not_found, '
+          'aligned: ${state.alignmentStatus == SessionAlignmentStatus.created}, '
+          'buffered ${batch.length} frames',
+        );
+      } else if (e.error.isSessionFinished) {
+        // Terminal: frames are dropped, do NOT re-buffer
+        state = state.copyWith(
+          status: SyncStatus.rejected,
+          pendingFrames: 0,
+          totalRejected: state.totalRejected + batch.length,
+          consecutiveFailures: 0,
+          lastRejection: null,
+          lastRejectionCode: 'session_finished',
+          lastErrorMessage: e.error.message,
+          lastErrorAt: now,
+        );
+        debugPrint(
+          '[BackendSync] Session finished — '
+          'dropped ${batch.length} frames: ${e.error.message}',
+        );
       } else {
         // Network or server error: buffer frames in chronological order
         _buffer.insertAll(0, batch);
