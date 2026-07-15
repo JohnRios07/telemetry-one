@@ -346,6 +346,15 @@ class BackendClient {
           message: 'Connection failed: ${e.message}',
         ),
       );
+    } on HttpException catch (e) {
+      throw BackendRequestException(
+        statusCode: 0,
+        error: BackendError(
+          code: 'http_error',
+          message: 'HTTP error after ${config.maxRetries} retries: '
+              '${e.message}',
+        ),
+      );
     }
   }
 

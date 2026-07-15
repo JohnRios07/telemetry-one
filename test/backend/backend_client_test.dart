@@ -307,6 +307,38 @@ void main() {
       expect(body.containsKey('frames'), isFalse);
     });
 
+    test('requestRaceEngineerAdvice throws on HTTP protocol error', () async {
+      final serverSocket = await ServerSocket.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+      );
+      final subscription = serverSocket.listen((socket) async {
+        socket.write('not an http response\r\n\r\n');
+        await socket.flush();
+        await socket.close();
+      });
+
+      final client = BackendClient(
+        config: BackendConfig(
+          baseUrl: 'http://127.0.0.1:${serverSocket.port}',
+          maxRetries: 0,
+        ),
+      );
+
+      try {
+        await client.requestRaceEngineerAdvice('session_test_1');
+        fail('Expected BackendRequestException');
+      } on BackendRequestException catch (e) {
+        expect(e.statusCode, 0);
+        expect(e.error.code, 'http_error');
+        expect(e.error.message, contains('HTTP error after 0 retries'));
+      } finally {
+        client.dispose();
+        await subscription.cancel();
+        await serverSocket.close();
+      }
+    });
+
     test('throws on server error with typed rejection details', () async {
       final server2 = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final port2 = server2.port;
