@@ -149,6 +149,68 @@ void main() {
       expect(response.hasAdvice, isFalse);
       expect(response.referencedEvents, isEmpty);
     });
+
+    test('parses rate_limited response with providerInfo fields', () {
+      final response = RaceEngineerAdviceResponse.fromJson({
+        'sessionId': 'session_test_1',
+        'status': 'rate_limited',
+        'message': 'Fallback summary: Brake earlier into turn 1.',
+        'referencedEvents': ['event_1'],
+        'providerInfo': {
+          'provider': 'legacy-provider',
+          'providerName': 'google-vertex-ai',
+          'model': 'gemini-2.0-pro',
+          'status': 'rate_limited',
+          'finishReason': 'rate_limited',
+          'retryAfterSeconds': 17,
+        },
+      });
+
+      expect(response.status, 'rate_limited');
+      expect(response.message, 'Fallback summary: Brake earlier into turn 1.');
+      expect(response.providerInfo!.providerName, 'google-vertex-ai');
+      expect(response.providerInfo!.provider, 'legacy-provider');
+      expect(response.providerInfo!.model, 'gemini-2.0-pro');
+      expect(response.providerInfo!.retryAfterSeconds, 17);
+      expect(response.providerInfo!.status, 'rate_limited');
+      expect(response.providerInfo!.finishReason, 'rate_limited');
+      expect(response.isRateLimited, isTrue);
+    });
+
+    test('treats providerInfo finishReason as rate_limited', () {
+      final response = RaceEngineerAdviceResponse.fromJson({
+        'sessionId': 'session_test_1',
+        'status': 'provider_error',
+        'message': 'Fallback summary: Short shift on corner exit.',
+        'referencedEventIds': ['event_2'],
+        'providerInfo': {
+          'providerName': 'OpenRouter',
+          'model': 'safe-model-name',
+          'finishReason': 'rate_limited',
+        },
+      });
+
+      expect(response.status, 'provider_error');
+      expect(response.providerInfo!.finishReason, 'rate_limited');
+      expect(response.isRateLimited, isTrue);
+      expect(response.message, 'Fallback summary: Short shift on corner exit.');
+    });
+
+    test('parses rate_limited response with null retryAfterSeconds', () {
+      final response = RaceEngineerAdviceResponse.fromJson({
+        'sessionId': 'session_test_1',
+        'status': 'rate_limited',
+        'referencedEvents': <String>[],
+        'providerInfo': {
+          'providerName': 'openai',
+          'status': 'rate_limited',
+        },
+      });
+
+      expect(response.providerInfo!.providerName, 'openai');
+      expect(response.providerInfo!.retryAfterSeconds, isNull);
+      expect(response.providerInfo!.model, isNull);
+    });
   });
 
   group('BackendClient', () {

@@ -141,12 +141,85 @@ class _PanelBody extends StatelessWidget {
             'No relevant engineer events are available for this session yet.',
         color: AppColors.warning,
       ),
+      RaceEngineerAdviceStatus.rateLimited => _RateLimitedBody(state: state),
       RaceEngineerAdviceStatus.error => _MessageBody(
         title: 'Unavailable',
         message: state.message ?? 'Race Engineer request failed.',
         color: AppColors.error,
       ),
     };
+  }
+}
+
+class _RateLimitedBody extends StatelessWidget {
+  final RaceEngineerAdviceState state;
+
+  const _RateLimitedBody({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final response = state.response;
+    final providerInfo = response?.providerInfo;
+
+    String warning = 'AI provider is rate-limited.';
+    if (providerInfo?.retryAfterSeconds case final seconds?) {
+      warning = 'AI provider is rate-limited. Try again in ~${seconds}s.';
+    }
+
+    final name = providerInfo?.providerName ?? providerInfo?.provider;
+    final model = providerInfo?.model;
+    final providerDetail = [name, model].whereType<String>().join(', ');
+    if (providerDetail.isNotEmpty) {
+      warning = '$warning\n$providerDetail';
+    }
+
+    final hasFallbackMessage =
+        state.message != null && state.message!.trim().isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.warning.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            warning,
+            style: AppTypography.inter(
+              size: 10,
+              height: 1.3,
+              color: AppColors.warning,
+            ),
+          ),
+        ),
+        if (hasFallbackMessage) ...[
+          const SizedBox(height: 8),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Text(
+                state.message!,
+                style: AppTypography.inter(
+                  size: 12,
+                  height: 1.35,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ),
+          if (response?.referencedEvents case final events?
+              when events.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                '${events.length} events referenced',
+                style: AppTypography.inter(size: 9, color: AppColors.textDim),
+              ),
+            ),
+        ],
+      ],
+    );
   }
 }
 

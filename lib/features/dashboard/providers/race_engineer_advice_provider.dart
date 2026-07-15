@@ -5,7 +5,14 @@ import '../../../../core/backend/backend_sync_provider.dart';
 import '../../../../core/backend/telemetry_frame_dto.dart';
 import '../../../../core/backend/v2_bridge_providers.dart';
 
-enum RaceEngineerAdviceStatus { idle, loading, success, noEvents, error }
+enum RaceEngineerAdviceStatus {
+  idle,
+  loading,
+  success,
+  noEvents,
+  rateLimited,
+  error,
+}
 
 class RaceEngineerAdviceAvailability {
   final bool canRequest;
@@ -82,6 +89,15 @@ class RaceEngineerAdviceNotifier
       if (response.hasNoEvents) {
         state = RaceEngineerAdviceState(
           status: RaceEngineerAdviceStatus.noEvents,
+          response: response,
+          message: response.message ?? response.advice,
+        );
+        return;
+      }
+
+      if (response.isRateLimited) {
+        state = RaceEngineerAdviceState(
+          status: RaceEngineerAdviceStatus.rateLimited,
           response: response,
           message: response.message ?? response.advice,
         );
