@@ -7,6 +7,21 @@ import '../../../../core/backend/v2_bridge_providers.dart';
 
 enum RaceEngineerAdviceStatus { idle, loading, success, noEvents, error }
 
+class RaceEngineerAdviceAvailability {
+  final bool canRequest;
+  final String? message;
+
+  const RaceEngineerAdviceAvailability._({
+    required this.canRequest,
+    this.message,
+  });
+
+  const RaceEngineerAdviceAvailability.available() : this._(canRequest: true);
+
+  const RaceEngineerAdviceAvailability.unavailable(String message)
+    : this._(canRequest: false, message: message);
+}
+
 class RaceEngineerAdviceState {
   final RaceEngineerAdviceStatus status;
   final RaceEngineerAdviceResponse? response;
@@ -45,24 +60,16 @@ class RaceEngineerAdviceNotifier
   }) async {
     if (state.status == RaceEngineerAdviceStatus.loading) return;
 
-    final v2Enabled = _ref.read(backendV2EnabledProvider);
-    if (!v2Enabled) {
-      state = const RaceEngineerAdviceState(
+    final availability = _ref.read(raceEngineerAdviceAvailabilityProvider);
+    if (!availability.canRequest) {
+      state = RaceEngineerAdviceState(
         status: RaceEngineerAdviceStatus.error,
-        message: 'Race Engineer is available only when V2 data is enabled.',
+        message: availability.message ?? 'Start a race to ask the engineer.',
       );
       return;
     }
 
-    final sessionId = _ref.read(backendSyncProvider).effectiveSessionId;
-    if (sessionId.trim().isEmpty) {
-      state = const RaceEngineerAdviceState(
-        status: RaceEngineerAdviceStatus.error,
-        message: 'No active backend session is available yet.',
-      );
-      return;
-    }
-
+    final sessionId = _ref.read(backendSyncProvider).effectiveSessionId.trim();
     state = const RaceEngineerAdviceState(
       status: RaceEngineerAdviceStatus.loading,
     );
@@ -106,3 +113,27 @@ final raceEngineerAdviceProvider =
     ) {
       return RaceEngineerAdviceNotifier(ref);
     });
+
+final raceEngineerAdviceAvailabilityProvider =
+    Provider<RaceEngineerAdviceAvailability>((ref) {
+      final v2Enabled = ref.watch(backendV2EnabledProvider);
+      if (!v2Enabled) {
+        return const RaceEngineerAdviceAvailability.unavailable(
+          'Race Engineer is available only when V2 data is enabled.',
+        );
+      }
+
+      final sessionId = ref.watch(backendSyncProvider).effectiveSessionId;
+      if (!_isEffectiveBackendSessionId(sessionId)) {
+        return const RaceEngineerAdviceAvailability.unavailable(
+          'Start a race to ask the engineer.',
+        );
+      }
+
+      return const RaceEngineerAdviceAvailability.available();
+    });
+
+bool _isEffectiveBackendSessionId(String sessionId) {
+  final trimmed = sessionId.trim();
+  return trimmed.startsWith('session_') && trimmed.length > 'session_'.length;
+}
