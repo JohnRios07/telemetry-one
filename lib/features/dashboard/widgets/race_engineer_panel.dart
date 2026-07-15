@@ -11,7 +11,9 @@ class RaceEngineerPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(raceEngineerAdviceProvider);
+    final availability = ref.watch(raceEngineerAdviceAvailabilityProvider);
     final loading = state.status == RaceEngineerAdviceStatus.loading;
+    final canRequest = !loading && availability.canRequest;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -38,13 +40,24 @@ class RaceEngineerPanel extends ConsumerWidget {
               ),
               _ActionButton(
                 label: _buttonLabel(state.status),
-                enabled: !loading,
+                enabled: canRequest,
                 onPressed: () => ref
                     .read(raceEngineerAdviceProvider.notifier)
                     .requestAdvice(),
               ),
             ],
           ),
+          if (availability.message != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              availability.message!,
+              style: AppTypography.inter(
+                size: 10,
+                height: 1.25,
+                color: AppColors.textDim,
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           Expanded(child: _PanelBody(state: state)),
         ],

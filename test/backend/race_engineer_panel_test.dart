@@ -23,8 +23,10 @@ class _FakeRaceEngineerAdviceNotifier extends RaceEngineerAdviceNotifier {
 
 Future<_FakeRaceEngineerAdviceNotifier> _pumpPanel(
   WidgetTester tester,
-  RaceEngineerAdviceState state,
-) async {
+  RaceEngineerAdviceState state, {
+  RaceEngineerAdviceAvailability availability =
+      const RaceEngineerAdviceAvailability.available(),
+}) async {
   late _FakeRaceEngineerAdviceNotifier notifier;
   await tester.pumpWidget(
     ProviderScope(
@@ -33,6 +35,7 @@ Future<_FakeRaceEngineerAdviceNotifier> _pumpPanel(
           notifier = _FakeRaceEngineerAdviceNotifier(ref, state);
           return notifier;
         }),
+        raceEngineerAdviceAvailabilityProvider.overrideWithValue(availability),
       ],
       child: const MaterialApp(
         home: Scaffold(body: SizedBox(height: 180, child: RaceEngineerPanel())),
@@ -69,6 +72,25 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       await tester.tap(find.text('Ask Engineer'));
       await tester.pump();
+      expect(notifier.requestCount, 0);
+    });
+
+    testWidgets('disables ask with friendly copy when no session exists', (
+      tester,
+    ) async {
+      final notifier = await _pumpPanel(
+        tester,
+        const RaceEngineerAdviceState.idle(),
+        availability: const RaceEngineerAdviceAvailability.unavailable(
+          'Start a race to ask the engineer.',
+        ),
+      );
+
+      expect(find.text('Start a race to ask the engineer.'), findsOneWidget);
+
+      await tester.tap(find.text('Ask Engineer'));
+      await tester.pump();
+
       expect(notifier.requestCount, 0);
     });
 

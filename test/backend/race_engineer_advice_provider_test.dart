@@ -154,22 +154,38 @@ void main() {
       expect(state.status, RaceEngineerAdviceStatus.error);
     });
 
-    test('missing effective session id blocks backend call', () async {
+    test('local fallback session id blocks backend call', () async {
       final client = _FakeBackendClient();
       final container = _container(
         config: const BackendConfig(useV2Data: true),
-        syncState: const BackendSyncState(sessionId: ''),
+        syncState: const BackendSyncState(sessionId: 'local_test_1'),
         client: client,
       );
       addTearDown(container.dispose);
 
       await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
 
+      final state = container.read(raceEngineerAdviceProvider);
       expect(client.callCount, 0);
-      expect(
-        container.read(raceEngineerAdviceProvider).status,
-        RaceEngineerAdviceStatus.error,
+      expect(state.status, RaceEngineerAdviceStatus.error);
+      expect(state.message, 'Start a race to ask the engineer.');
+    });
+
+    test('availability is unavailable until effective session_* exists', () {
+      final client = _FakeBackendClient();
+      final container = _container(
+        config: const BackendConfig(useV2Data: true),
+        syncState: const BackendSyncState(sessionId: 'local_test_1'),
+        client: client,
       );
+      addTearDown(container.dispose);
+
+      final availability = container.read(
+        raceEngineerAdviceAvailabilityProvider,
+      );
+
+      expect(availability.canRequest, isFalse);
+      expect(availability.message, 'Start a race to ask the engineer.');
     });
   });
 }
