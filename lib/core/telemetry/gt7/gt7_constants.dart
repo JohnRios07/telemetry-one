@@ -54,4 +54,5 @@ class Gt7Constants {
 
   // Packet C extensions.
   static const int offsetCurrentLapTime = 0x15C; // int32 (ms)
+  static const int offsetSurfaceType = 0x158; // char[4] (FL, FR, RL, RR)
 }
