@@ -112,6 +112,7 @@ class Gt7Parser extends TelemetryParser {
       posX: packet.posX,
       posY: packet.posY,
       posZ: packet.posZ,
+      isOnTrack: packet.isOnTrack,
       rpmRevWarning: packet.rpmRevWarning.toDouble(),
       rpmRevLimiter: packet.rpmRevLimiter.toDouble(),
     );

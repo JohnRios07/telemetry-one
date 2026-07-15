@@ -22,7 +22,7 @@ TelemetryFrameDto mapTelemetryToFrame(TelemetryData data) {
     currentLapMs: currentLapMs,
     lastLapMs: data.lastLapTime?.inMilliseconds,
     bestLapMs: data.bestLapTime?.inMilliseconds,
-    isOnTrack: true,
+    isOnTrack: data.isOnTrack,
   );
 }
 
