@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/backend/backend_sync_provider.dart';
+import '../../../../core/backend/v2_bridge_providers.dart';
 import '../../../core/models/telemetry_data.dart';
 import '../../../../config/theme/app_colors.dart';
 import '../../../../config/theme/app_typography.dart';
@@ -15,6 +16,7 @@ import '../widgets/throttle_brake_bar.dart';
 import '../widgets/lap_times.dart';
 import '../widgets/fuel_indicator.dart';
 import '../widgets/player_track_map.dart';
+import '../widgets/race_engineer_panel.dart';
 import '../widgets/tire_temps.dart';
 
 /// Landscape dashboard with strong visual hierarchy inspired by motorsport pits.
@@ -102,12 +104,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxHeight < 210;
+        final v2Enabled = ref.watch(backendV2EnabledProvider);
 
         return Row(
           children: [
             Expanded(flex: 42, child: TireTemps(compact: compact)),
             const SizedBox(width: 10),
-            const Expanded(flex: 58, child: PlayerTrackMap()),
+            if (v2Enabled) ...[
+              const Expanded(flex: 28, child: PlayerTrackMap()),
+              const SizedBox(width: 10),
+              const Expanded(flex: 30, child: RaceEngineerPanel()),
+            ] else
+              const Expanded(flex: 58, child: PlayerTrackMap()),
           ],
         );
       },
