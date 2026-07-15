@@ -31,6 +31,11 @@ class Gt7Packet {
   final int throttle;
   final int brake;
   final double clutch;
+  final String surfaceType;
+
+  static const _trackCompatible = {'T', 'C'};
+  static const _offTrackSurfaces = {'D', 'G', 'S', 's'};
+  static const _allKnownSurfaces = {'T', 'C', 'D', 'G', 'S', 's'};
 
   const Gt7Packet({
     required this.magic,
@@ -57,6 +62,7 @@ class Gt7Packet {
     required this.throttle,
     required this.brake,
     required this.clutch,
+    required this.surfaceType,
   });
 
   // --- Derived getters ---
@@ -68,7 +74,14 @@ class Gt7Packet {
       fuelCapacity > 0 ? (currentFuel / fuelCapacity * 100).clamp(0, 100) : 0.0;
   int get currentGear => gears & 0x0F;
   int get suggestedGear => gears >> 4;
-  bool get isOnTrack => (simulatorFlags & 0x01) != 0;
+  bool get isOnTrack {
+    if (surfaceType.length == 4 &&
+        surfaceType.runes.every((r) => _allKnownSurfaces.contains(String.fromCharCode(r)))) {
+      final offTrackCount = surfaceType.split('').where(_offTrackSurfaces.contains).length;
+      return offTrackCount < 3;
+    }
+    return (simulatorFlags & 0x01) != 0;
+  }
 
   /// Parse a decrypted Packet C payload.
   static Gt7Packet fromDecryptedBytes(Uint8List data) {
@@ -117,6 +130,12 @@ class Gt7Packet {
       throttle: buf.getUint8(Gt7Constants.offsetThrottle),
       brake: buf.getUint8(Gt7Constants.offsetBrake),
       clutch: buf.getFloat32(Gt7Constants.offsetClutch, Endian.little),
+      surfaceType: String.fromCharCodes([
+        buf.getUint8(Gt7Constants.offsetSurfaceType),
+        buf.getUint8(Gt7Constants.offsetSurfaceType + 1),
+        buf.getUint8(Gt7Constants.offsetSurfaceType + 2),
+        buf.getUint8(Gt7Constants.offsetSurfaceType + 3),
+      ]),
     );
   }
 }
