@@ -82,7 +82,35 @@ void main() {
   });
 
   group('RaceEngineerAdviceResponse', () {
-    test('parses success response', () {
+    test('parses success response with backend contract fields', () {
+      final response = RaceEngineerAdviceResponse.fromJson({
+        'sessionId': 'session_test_1',
+        'status': 'success',
+        'message': 'Brake earlier into turn 1.',
+        'referencedEvents': ['event_1'],
+        'window': {
+          'sinceUnixMs': 1720656000000,
+          'untilUnixMs': 1720656060000,
+          'maxEvents': 10,
+        },
+        'generatedAtUnixMs': 1770000000000,
+        'providerInfo': {
+          'provider': 'server-owned',
+          'model': 'safe-label',
+          'status': 'ok',
+        },
+      });
+
+      expect(response.sessionId, 'session_test_1');
+      expect(response.hasAdvice, isTrue);
+      expect(response.hasNoEvents, isFalse);
+      expect(response.referencedEvents, ['event_1']);
+      expect(response.window!.maxEvents, 10);
+      expect(response.providerInfo!.status, 'ok');
+      expect(response.generatedAtUnixMs, 1770000000000);
+    });
+
+    test('parses success response with legacy advice field', () {
       final response = RaceEngineerAdviceResponse.fromJson({
         'sessionId': 'session_test_1',
         'status': 'success',
@@ -104,7 +132,7 @@ void main() {
       expect(response.sessionId, 'session_test_1');
       expect(response.hasAdvice, isTrue);
       expect(response.hasNoEvents, isFalse);
-      expect(response.referencedEventIds, ['event_1']);
+      expect(response.referencedEvents, ['event_1']);
       expect(response.window!.maxEvents, 10);
       expect(response.providerInfo!.status, 'ok');
     });
@@ -113,13 +141,13 @@ void main() {
       final response = RaceEngineerAdviceResponse.fromJson({
         'sessionId': 'session_test_1',
         'status': 'no_events',
-        'advice': null,
-        'referencedEventIds': <String>[],
+        'message': null,
+        'referencedEvents': <String>[],
       });
 
       expect(response.hasNoEvents, isTrue);
       expect(response.hasAdvice, isFalse);
-      expect(response.referencedEventIds, isEmpty);
+      expect(response.referencedEvents, isEmpty);
     });
   });
 
@@ -210,10 +238,10 @@ void main() {
           request.response.write(jsonEncode({
             'sessionId': 'session_test_1',
             'status': 'success',
-            'advice': 'Brake earlier into turn 1.',
-            'referencedEventIds': ['event_01j2example'],
+            'message': 'Brake earlier into turn 1.',
+            'referencedEvents': ['event_01j2example'],
             'window': {'maxEvents': 5},
-            'generatedAt': '2026-07-14T00:00:00Z',
+            'generatedAtUnixMs': 1770000000000,
           }));
           request.response.close();
         } else {
@@ -291,7 +319,7 @@ void main() {
       );
 
       expect(response.status, 'success');
-      expect(response.advice, contains('Brake earlier'));
+      expect(response.message, contains('Brake earlier'));
       expect(_receivedRequests, hasLength(1));
       expect(
         _receivedRequests.single['uri'],

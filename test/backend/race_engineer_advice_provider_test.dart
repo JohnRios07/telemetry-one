@@ -28,7 +28,7 @@ class _FakeBackendClient extends BackendClient {
         const RaceEngineerAdviceResponse(
           sessionId: 'session_test_1',
           status: 'success',
-          advice: 'Brake earlier into turn 1.',
+          message: 'Brake earlier into turn 1.',
         );
   }
 }
