@@ -38,6 +38,9 @@ class TelemetryData {
   // Level 4 — Chassis
   final double steeringAngle; // -1.0 (left) to 1.0 (right), 0.0 = center
 
+  // Level 5 — Track State
+  final bool isOnTrack;
+
   // Engine limits
   final double rpmRevWarning;
   final double rpmRevLimiter;
@@ -67,6 +70,7 @@ class TelemetryData {
     this.posY = 0,
     this.posZ = 0,
     this.steeringAngle = 0,
+    this.isOnTrack = true,
     this.rpmRevWarning = 0,
     this.rpmRevLimiter = 0,
   });

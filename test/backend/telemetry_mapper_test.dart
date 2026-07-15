@@ -23,6 +23,7 @@ void main() {
       int? currentLapTimeMs = 81234,
       int? lastLapMs = 91345,
       int? bestLapMs = 90210,
+      bool isOnTrack = true,
     }) {
       return TelemetryData(
         timestamp: baseTime,
@@ -33,6 +34,7 @@ void main() {
         throttle: throttle,
         brake: brake,
         steeringAngle: steering,
+        isOnTrack: isOnTrack,
         fuelCurrentL: fuelL,
         posX: posX,
         posY: posY,
@@ -139,6 +141,21 @@ void main() {
     test('maps steeringAngle', () {
       final frame = mapTelemetryToFrame(_data(steering: -0.12));
       expect(frame.steeringAngle, -0.12);
+    });
+
+    test('maps isOnTrack true when source is on track', () {
+      final frame = mapTelemetryToFrame(_data(isOnTrack: true));
+      expect(frame.isOnTrack, isTrue);
+    });
+
+    test('maps isOnTrack false when source is off track', () {
+      final frame = mapTelemetryToFrame(_data(isOnTrack: false));
+      expect(frame.isOnTrack, isFalse);
+    });
+
+    test('maps isOnTrack defaults to true in TelemetryData', () {
+      final data = TelemetryData(timestamp: DateTime.now());
+      expect(data.isOnTrack, isTrue);
     });
 
     test('maps lapNumber from currentLap', () {
