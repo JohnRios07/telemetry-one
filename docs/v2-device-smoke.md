@@ -128,8 +128,28 @@ flutter run
 - Verify session ID is `local_*`
 - Verify no backend calls (no `POST /api/v1/sessions`)
 - Verify all telemetry and recording work as before
+- Verify the Race Engineer dashboard panel is not visible
 
-## Step 8 — Rollback test (backend failure)
+## Step 8 — Race Engineer panel smoke
+
+With the V2 command from Step 2 running:
+
+1. Confirm the dashboard shows the **RACE ENGINEER** panel beside the track map.
+2. Do not press **Ask Engineer** yet.
+   - Expected: panel stays idle.
+   - Expected: no `POST /api/v1/sessions/{sessionId}/race-engineer/advice` request appears in backend logs.
+3. After backend sync has an effective session (`session_*` preferred, local fallback if alignment failed), press **Ask Engineer**.
+   - Expected: one manual `POST /api/v1/sessions/{effectiveSessionId}/race-engineer/advice` request.
+   - Expected: no OpenRouter key, provider configuration, prompt text, or raw telemetry frames are sent by Flutter.
+4. Happy path response:
+   - Expected: panel shows returned advice and the button changes to **Refresh**.
+5. No-events response:
+   - Expected: panel shows **NO EVENTS** copy and does not treat it as a failure.
+6. Backend error or unreachable backend:
+   - Expected: panel shows **UNAVAILABLE** with retry copy.
+   - Press **Ask Engineer** again only when you want a manual retry; there is no polling or auto-refresh.
+
+## Step 9 — Rollback test (backend failure)
 
 Simulate a backend failure by stopping the backend or providing an unreachable URL:
 
@@ -146,6 +166,7 @@ Expected:
 - V2 sync badge shows `DOWN` (yellow dot)
 - Counters show frame accumulation in buffer
 - When backend recovers, badge returns to `IDLE` (green dot)
+- Race Engineer panel shows an error only after a manual **Ask Engineer** press
 
 ## Commands reference
 

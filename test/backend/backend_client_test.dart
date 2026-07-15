@@ -62,6 +62,67 @@ void main() {
     });
   });
 
+  group('RaceEngineerAdviceRequest toJson', () {
+    test('omits null optional fields', () {
+      final json = const RaceEngineerAdviceRequest().toJson();
+
+      expect(json.containsKey('sinceUnixMs'), isFalse);
+      expect(json.containsKey('maxEvents'), isFalse);
+    });
+
+    test('includes provided optional fields', () {
+      final json = const RaceEngineerAdviceRequest(
+        sinceUnixMs: 1720656000000,
+        maxEvents: 5,
+      ).toJson();
+
+      expect(json['sinceUnixMs'], 1720656000000);
+      expect(json['maxEvents'], 5);
+    });
+  });
+
+  group('RaceEngineerAdviceResponse', () {
+    test('parses success response', () {
+      final response = RaceEngineerAdviceResponse.fromJson({
+        'sessionId': 'session_test_1',
+        'status': 'success',
+        'advice': 'Brake earlier into turn 1.',
+        'referencedEventIds': ['event_1'],
+        'window': {
+          'sinceUnixMs': 1720656000000,
+          'untilUnixMs': 1720656060000,
+          'maxEvents': 10,
+        },
+        'generatedAt': '2026-07-14T00:00:00Z',
+        'providerInfo': {
+          'provider': 'server-owned',
+          'model': 'safe-label',
+          'status': 'ok',
+        },
+      });
+
+      expect(response.sessionId, 'session_test_1');
+      expect(response.hasAdvice, isTrue);
+      expect(response.hasNoEvents, isFalse);
+      expect(response.referencedEventIds, ['event_1']);
+      expect(response.window!.maxEvents, 10);
+      expect(response.providerInfo!.status, 'ok');
+    });
+
+    test('parses no_events response', () {
+      final response = RaceEngineerAdviceResponse.fromJson({
+        'sessionId': 'session_test_1',
+        'status': 'no_events',
+        'advice': null,
+        'referencedEventIds': <String>[],
+      });
+
+      expect(response.hasNoEvents, isTrue);
+      expect(response.hasAdvice, isFalse);
+      expect(response.referencedEventIds, isEmpty);
+    });
+  });
+
   group('BackendClient', () {
     late HttpServer _server;
     late int _port;
@@ -142,6 +203,19 @@ void main() {
             ],
           }));
           request.response.close();
+        } else if (path.endsWith('/race-engineer/advice') &&
+            request.method == 'POST') {
+          request.response.statusCode = 200;
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(jsonEncode({
+            'sessionId': 'session_test_1',
+            'status': 'success',
+            'advice': 'Brake earlier into turn 1.',
+            'referencedEventIds': ['event_01j2example'],
+            'window': {'maxEvents': 5},
+            'generatedAt': '2026-07-14T00:00:00Z',
+          }));
+          request.response.close();
         } else {
           request.response.statusCode = 404;
           request.response.headers.contentType = ContentType.json;
@@ -208,6 +282,29 @@ void main() {
 
       expect(events, hasLength(1));
       expect(events.first.lapNumber, 2);
+    });
+
+    test('requestRaceEngineerAdvice posts exact path and safe payload', () async {
+      final response = await _client.requestRaceEngineerAdvice(
+        'session_test_1',
+        const RaceEngineerAdviceRequest(maxEvents: 5),
+      );
+
+      expect(response.status, 'success');
+      expect(response.advice, contains('Brake earlier'));
+      expect(_receivedRequests, hasLength(1));
+      expect(
+        _receivedRequests.single['uri'],
+        '/api/v1/sessions/session_test_1/race-engineer/advice',
+      );
+
+      final body = jsonDecode(_receivedRequests.single['body'] as String)
+          as Map<String, dynamic>;
+      expect(body, {'maxEvents': 5});
+      expect(body.containsKey('openRouterKey'), isFalse);
+      expect(body.containsKey('provider'), isFalse);
+      expect(body.containsKey('prompt'), isFalse);
+      expect(body.containsKey('frames'), isFalse);
     });
 
     test('throws on server error with typed rejection details', () async {

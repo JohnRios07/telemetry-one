@@ -353,6 +353,106 @@ class FinishSessionResponse {
   }
 }
 
+class RaceEngineerAdviceRequest {
+  final int? sinceUnixMs;
+  final int? maxEvents;
+
+  const RaceEngineerAdviceRequest({
+    this.sinceUnixMs,
+    this.maxEvents,
+  });
+
+  Map<String, dynamic> toJson() {
+    final json = <String, dynamic>{};
+    if (sinceUnixMs != null) json['sinceUnixMs'] = sinceUnixMs;
+    if (maxEvents != null) json['maxEvents'] = maxEvents;
+    return json;
+  }
+}
+
+class RaceEngineerAdviceWindow {
+  final int? sinceUnixMs;
+  final int? untilUnixMs;
+  final int? maxEvents;
+
+  const RaceEngineerAdviceWindow({
+    this.sinceUnixMs,
+    this.untilUnixMs,
+    this.maxEvents,
+  });
+
+  factory RaceEngineerAdviceWindow.fromJson(Map<String, dynamic> json) {
+    return RaceEngineerAdviceWindow(
+      sinceUnixMs: (json['sinceUnixMs'] as num?)?.toInt(),
+      untilUnixMs: (json['untilUnixMs'] as num?)?.toInt(),
+      maxEvents: (json['maxEvents'] as num?)?.toInt(),
+    );
+  }
+}
+
+class RaceEngineerProviderInfo {
+  final String? provider;
+  final String? model;
+  final String? status;
+
+  const RaceEngineerProviderInfo({
+    this.provider,
+    this.model,
+    this.status,
+  });
+
+  factory RaceEngineerProviderInfo.fromJson(Map<String, dynamic> json) {
+    return RaceEngineerProviderInfo(
+      provider: json['provider'] as String?,
+      model: json['model'] as String?,
+      status: json['status'] as String?,
+    );
+  }
+}
+
+class RaceEngineerAdviceResponse {
+  final String sessionId;
+  final String status;
+  final String? advice;
+  final List<String> referencedEventIds;
+  final RaceEngineerAdviceWindow? window;
+  final String? generatedAt;
+  final RaceEngineerProviderInfo? providerInfo;
+
+  const RaceEngineerAdviceResponse({
+    required this.sessionId,
+    required this.status,
+    this.advice,
+    this.referencedEventIds = const [],
+    this.window,
+    this.generatedAt,
+    this.providerInfo,
+  });
+
+  bool get hasAdvice => advice != null && advice!.trim().isNotEmpty;
+  bool get hasNoEvents => status == 'no_events';
+
+  factory RaceEngineerAdviceResponse.fromJson(Map<String, dynamic> json) {
+    return RaceEngineerAdviceResponse(
+      sessionId: json['sessionId'] as String,
+      status: json['status'] as String,
+      advice: json['advice'] as String?,
+      referencedEventIds:
+          (json['referencedEventIds'] as List<dynamic>?)?.cast<String>() ??
+              const [],
+      window: json['window'] != null
+          ? RaceEngineerAdviceWindow.fromJson(
+              json['window'] as Map<String, dynamic>)
+          : null,
+      generatedAt: json['generatedAt'] as String?,
+      providerInfo: json['providerInfo'] != null
+          ? RaceEngineerProviderInfo.fromJson(
+              json['providerInfo'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+}
+
 class EngineerEvent {
   final String eventId;
   final String sessionId;
