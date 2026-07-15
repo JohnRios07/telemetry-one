@@ -413,44 +413,56 @@ class RaceEngineerProviderInfo {
 class RaceEngineerAdviceResponse {
   final String sessionId;
   final String status;
+  final String? message;
   final String? advice;
-  final List<String> referencedEventIds;
+  final List<String> referencedEvents;
   final RaceEngineerAdviceWindow? window;
-  final String? generatedAt;
+  final int? generatedAtUnixMs;
   final RaceEngineerProviderInfo? providerInfo;
 
   const RaceEngineerAdviceResponse({
     required this.sessionId,
     required this.status,
+    this.message,
     this.advice,
-    this.referencedEventIds = const [],
+    this.referencedEvents = const [],
     this.window,
-    this.generatedAt,
+    this.generatedAtUnixMs,
     this.providerInfo,
   });
 
-  bool get hasAdvice => advice != null && advice!.trim().isNotEmpty;
+  bool get hasAdvice =>
+      (message != null && message!.trim().isNotEmpty) ||
+      (advice != null && advice!.trim().isNotEmpty);
   bool get hasNoEvents => status == 'no_events';
 
   factory RaceEngineerAdviceResponse.fromJson(Map<String, dynamic> json) {
     return RaceEngineerAdviceResponse(
       sessionId: json['sessionId'] as String,
       status: json['status'] as String,
+      message: json['message'] as String?,
       advice: json['advice'] as String?,
-      referencedEventIds:
-          (json['referencedEventIds'] as List<dynamic>?)?.cast<String>() ??
+      referencedEvents:
+          (json['referencedEvents'] as List<dynamic>?)?.cast<String>() ??
+              (json['referencedEventIds'] as List<dynamic>?)?.cast<String>() ??
               const [],
       window: json['window'] != null
           ? RaceEngineerAdviceWindow.fromJson(
               json['window'] as Map<String, dynamic>)
           : null,
-      generatedAt: json['generatedAt'] as String?,
+      generatedAtUnixMs: (json['generatedAtUnixMs'] as num?)?.toInt() ??
+          _parseGeneratedAtMs(json['generatedAt'] as String?),
       providerInfo: json['providerInfo'] != null
           ? RaceEngineerProviderInfo.fromJson(
               json['providerInfo'] as Map<String, dynamic>)
           : null,
     );
   }
+}
+
+int? _parseGeneratedAtMs(String? generatedAt) {
+  if (generatedAt == null) return null;
+  return DateTime.tryParse(generatedAt)?.millisecondsSinceEpoch;
 }
 
 class EngineerEvent {

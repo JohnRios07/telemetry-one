@@ -176,7 +176,7 @@ class _AdviceBody extends StatelessWidget {
         if (response != null) ...[
           const SizedBox(height: 6),
           Text(
-            '${response.referencedEventIds.length} events referenced',
+            '${response.referencedEvents.length} events referenced',
             style: AppTypography.inter(size: 9, color: AppColors.textDim),
           ),
         ],

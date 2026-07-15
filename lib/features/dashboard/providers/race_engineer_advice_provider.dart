@@ -83,7 +83,7 @@ class RaceEngineerAdviceNotifier
         state = RaceEngineerAdviceState(
           status: RaceEngineerAdviceStatus.noEvents,
           response: response,
-          message: response.advice,
+          message: response.message ?? response.advice,
         );
         return;
       }
@@ -91,7 +91,7 @@ class RaceEngineerAdviceNotifier
       state = RaceEngineerAdviceState(
         status: RaceEngineerAdviceStatus.success,
         response: response,
-        message: response.advice,
+        message: response.message ?? response.advice,
       );
     } on BackendRequestException catch (e) {
       state = RaceEngineerAdviceState(

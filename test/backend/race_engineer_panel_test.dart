@@ -102,8 +102,8 @@ void main() {
           response: RaceEngineerAdviceResponse(
             sessionId: 'session_test_1',
             status: 'success',
-            advice: 'Brake earlier into turn 1.',
-            referencedEventIds: ['event_1'],
+            message: 'Brake earlier into turn 1.',
+            referencedEvents: ['event_1'],
           ),
           message: 'Brake earlier into turn 1.',
         ),
