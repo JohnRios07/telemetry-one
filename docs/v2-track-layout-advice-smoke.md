@@ -40,7 +40,7 @@ Expected initial UI state:
 3. Confirm track detection is still pending before the first completed lap:
 
 ```bash
-curl -s http://129.213.127.143:8081/api/v1/sessions/$SESSION_ID/track | jq '{status, reason, nextAction, trackId, layoutId}'
+curl -s http://129.213.127.143:8081/api/v1/sessions/$SESSION_ID/track | jq '{status, reason: .reasons[0], nextAction, trackId, layoutId}'
 ```
 
 Expected: `status: "pending"` with a reason like `insufficient_data` or `no_completed_lap`.
