@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../config/theme/app_colors.dart';
 import '../../../../config/theme/app_typography.dart';
+import '../../../../core/backend/telemetry_frame_dto.dart';
+import '../../../../core/backend/v2_bridge_providers.dart';
 import '../../engineer/screens/engineer_sessions_screen.dart';
 import '../providers/session_provider.dart';
 import '../providers/telemetry_provider.dart';
@@ -20,6 +22,7 @@ class HeaderBar extends ConsumerStatefulWidget {
 
 class _HeaderBarState extends ConsumerState<HeaderBar> {
   late Timer _timer;
+  Timer? _trackPollTimer;
   DateTime _now = DateTime.now();
 
   @override
@@ -35,7 +38,23 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
   @override
   void dispose() {
     _timer.cancel();
+    _trackPollTimer?.cancel();
     super.dispose();
+  }
+
+  void _startTrackPolling() {
+    if (_trackPollTimer != null) return;
+    _trackPollTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) {
+        if (mounted) ref.invalidate(backendTrackDetectionProvider);
+      },
+    );
+  }
+
+  void _stopTrackPolling() {
+    _trackPollTimer?.cancel();
+    _trackPollTimer = null;
   }
 
   @override
@@ -45,6 +64,21 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
     final position = ref.watch(currentPositionProvider);
     final sessionState = ref.watch(sessionRecorderProvider);
     final isConnected = data != null;
+
+    final trackDetection = ref.watch(backendTrackDetectionProvider);
+    final trackResponse = trackDetection.valueOrNull;
+
+    ref.listen(backendTrackDetectionProvider, (_, next) {
+      next.whenOrNull(
+        data: (response) {
+          if (response?.isPending == true && sessionState.isRecording) {
+            _startTrackPolling();
+          } else {
+            _stopTrackPolling();
+          }
+        },
+      );
+    });
 
     return Container(
       height: 54,
@@ -157,7 +191,7 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
 
           Expanded(
             child: Text(
-              'CIRCUIT UNKNOWN',
+              circuitDisplayText(trackResponse, sessionState.isRecording),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTypography.inter(
@@ -501,4 +535,24 @@ class _RecordingStopIcon extends StatelessWidget {
       ),
     );
   }
+}
+
+String circuitDisplayText(TrackDetectionResponse? response, bool hasActiveSession) {
+  if (response == null) return 'CIRCUIT UNKNOWN';
+
+  if (response.isDetected) {
+    final track = response.trackName?.trim();
+    final layout = response.layoutName?.trim();
+    final hasTrack = track != null && track.isNotEmpty;
+    final hasLayout = layout != null && layout.isNotEmpty;
+
+    if (hasTrack && hasLayout) return '$track · $layout';
+    if (hasTrack) return track!;
+    if (hasLayout) return layout!;
+    return 'CIRCUIT UNKNOWN';
+  }
+
+  if (response.isPending && hasActiveSession) return 'Detecting...';
+
+  return 'CIRCUIT UNKNOWN';
 }
