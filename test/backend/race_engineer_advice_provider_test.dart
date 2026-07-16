@@ -95,6 +95,125 @@ void main() {
       expect(state.message, 'Brake earlier into turn 1.');
     });
 
+    test('maps rate_limited response to rateLimited status', () async {
+      final client = _FakeBackendClient()
+        ..response = const RaceEngineerAdviceResponse(
+          sessionId: 'session_test_1',
+          status: 'rate_limited',
+          message: 'Fallback: Brake earlier.',
+          providerInfo: RaceEngineerProviderInfo(
+            providerName: 'google-vertex-ai',
+            model: 'gemini-2.0-pro',
+            retryAfterSeconds: 17,
+          ),
+        );
+      final container = _container(
+        config: const BackendConfig(useV2Data: true),
+        syncState: const BackendSyncState(sessionId: 'session_test_1'),
+        client: client,
+      );
+      addTearDown(container.dispose);
+
+      await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
+
+      final state = container.read(raceEngineerAdviceProvider);
+      expect(state.status, RaceEngineerAdviceStatus.rateLimited);
+      expect(state.message, 'Fallback: Brake earlier.');
+      expect(state.response?.providerInfo?.retryAfterSeconds, 17);
+      expect(state.response?.providerInfo?.providerName, 'google-vertex-ai');
+      expect(state.cooldownExpiresAt, isNotNull);
+
+      await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
+
+      expect(client.callCount, 1);
+    });
+
+    test('maps rate_limited response without fallback message', () async {
+      final client = _FakeBackendClient()
+        ..response = const RaceEngineerAdviceResponse(
+          sessionId: 'session_test_1',
+          status: 'rate_limited',
+          providerInfo: RaceEngineerProviderInfo(retryAfterSeconds: 30),
+        );
+      final container = _container(
+        config: const BackendConfig(useV2Data: true),
+        syncState: const BackendSyncState(sessionId: 'session_test_1'),
+        client: client,
+      );
+      addTearDown(container.dispose);
+
+      await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
+
+      final state = container.read(raceEngineerAdviceProvider);
+      expect(state.status, RaceEngineerAdviceStatus.rateLimited);
+      expect(state.message, isNull);
+      expect(state.response?.providerInfo?.retryAfterSeconds, 30);
+      expect(state.cooldownExpiresAt, isNotNull);
+    });
+
+    test(
+      'rate_limited response without retryAfterSeconds does not block retry',
+      () async {
+        final client = _FakeBackendClient()
+          ..response = const RaceEngineerAdviceResponse(
+            sessionId: 'session_test_1',
+            status: 'provider_error',
+            providerInfo: RaceEngineerProviderInfo(
+              finishReason: 'rate_limited',
+            ),
+          );
+        final container = _container(
+          config: const BackendConfig(useV2Data: true),
+          syncState: const BackendSyncState(sessionId: 'session_test_1'),
+          client: client,
+        );
+        addTearDown(container.dispose);
+
+        await container
+            .read(raceEngineerAdviceProvider.notifier)
+            .requestAdvice();
+        await container
+            .read(raceEngineerAdviceProvider.notifier)
+            .requestAdvice();
+
+        final state = container.read(raceEngineerAdviceProvider);
+        expect(client.callCount, 2);
+        expect(state.status, RaceEngineerAdviceStatus.rateLimited);
+        expect(state.cooldownExpiresAt, isNull);
+      },
+    );
+
+    test(
+      'maps provider finishReason rate_limited to rateLimited status',
+      () async {
+        final client = _FakeBackendClient()
+          ..response = const RaceEngineerAdviceResponse(
+            sessionId: 'session_test_1',
+            status: 'provider_error',
+            message: 'Fallback: Turn in later.',
+            providerInfo: RaceEngineerProviderInfo(
+              finishReason: 'rate_limited',
+              providerName: 'OpenRouter',
+            ),
+          );
+        final container = _container(
+          config: const BackendConfig(useV2Data: true),
+          syncState: const BackendSyncState(sessionId: 'session_test_1'),
+          client: client,
+        );
+        addTearDown(container.dispose);
+
+        await container
+            .read(raceEngineerAdviceProvider.notifier)
+            .requestAdvice();
+
+        final state = container.read(raceEngineerAdviceProvider);
+        expect(state.status, RaceEngineerAdviceStatus.rateLimited);
+        expect(state.message, 'Fallback: Turn in later.');
+        expect(state.response?.providerInfo?.finishReason, 'rate_limited');
+      },
+    );
+
     test('maps no_events response without failure', () async {
       final client = _FakeBackendClient()
         ..response = const RaceEngineerAdviceResponse(

@@ -394,11 +394,17 @@ class RaceEngineerProviderInfo {
   final String? provider;
   final String? model;
   final String? status;
+  final String? finishReason;
+  final String? providerName;
+  final int? retryAfterSeconds;
 
   const RaceEngineerProviderInfo({
     this.provider,
     this.model,
     this.status,
+    this.finishReason,
+    this.providerName,
+    this.retryAfterSeconds,
   });
 
   factory RaceEngineerProviderInfo.fromJson(Map<String, dynamic> json) {
@@ -406,6 +412,9 @@ class RaceEngineerProviderInfo {
       provider: json['provider'] as String?,
       model: json['model'] as String?,
       status: json['status'] as String?,
+      finishReason: json['finishReason'] as String?,
+      providerName: json['providerName'] as String?,
+      retryAfterSeconds: (json['retryAfterSeconds'] as num?)?.toInt(),
     );
   }
 }
@@ -435,6 +444,10 @@ class RaceEngineerAdviceResponse {
       (message != null && message!.trim().isNotEmpty) ||
       (advice != null && advice!.trim().isNotEmpty);
   bool get hasNoEvents => status == 'no_events';
+  bool get isRateLimited =>
+      status == 'rate_limited' ||
+      providerInfo?.finishReason == 'rate_limited' ||
+      providerInfo?.status == 'rate_limited';
 
   factory RaceEngineerAdviceResponse.fromJson(Map<String, dynamic> json) {
     return RaceEngineerAdviceResponse(

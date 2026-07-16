@@ -13,7 +13,12 @@ class RaceEngineerPanel extends ConsumerWidget {
     final state = ref.watch(raceEngineerAdviceProvider);
     final availability = ref.watch(raceEngineerAdviceAvailabilityProvider);
     final loading = state.status == RaceEngineerAdviceStatus.loading;
-    final canRequest = !loading && availability.canRequest;
+    final cooldownSeconds = state.remainingCooldownSeconds();
+    final canRequest =
+        !loading && availability.canRequest && cooldownSeconds == null;
+    final cooldownMessage = cooldownSeconds != null
+        ? 'Race Engineer is cooling down. Retry in ${cooldownSeconds}s.'
+        : null;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -39,7 +44,7 @@ class RaceEngineerPanel extends ConsumerWidget {
                 ),
               ),
               _ActionButton(
-                label: _buttonLabel(state.status),
+                label: _buttonLabel(state.status, cooldownSeconds),
                 enabled: canRequest,
                 onPressed: () => ref
                     .read(raceEngineerAdviceProvider.notifier)
@@ -47,10 +52,10 @@ class RaceEngineerPanel extends ConsumerWidget {
               ),
             ],
           ),
-          if (availability.message != null) ...[
+          if (cooldownMessage != null || availability.message != null) ...[
             const SizedBox(height: 6),
             Text(
-              availability.message!,
+              cooldownMessage ?? availability.message!,
               style: AppTypography.inter(
                 size: 10,
                 height: 1.25,
@@ -66,7 +71,9 @@ class RaceEngineerPanel extends ConsumerWidget {
   }
 }
 
-String _buttonLabel(RaceEngineerAdviceStatus status) {
+String _buttonLabel(RaceEngineerAdviceStatus status, int? cooldownSeconds) {
+  if (cooldownSeconds != null) return 'Retry in ${cooldownSeconds}s';
+
   return switch (status) {
     RaceEngineerAdviceStatus.success => 'Refresh',
     _ => 'Ask Engineer',
@@ -141,12 +148,86 @@ class _PanelBody extends StatelessWidget {
             'No relevant engineer events are available for this session yet.',
         color: AppColors.warning,
       ),
+      RaceEngineerAdviceStatus.rateLimited => _RateLimitedBody(state: state),
       RaceEngineerAdviceStatus.error => _MessageBody(
         title: 'Unavailable',
         message: state.message ?? 'Race Engineer request failed.',
         color: AppColors.error,
       ),
     };
+  }
+}
+
+class _RateLimitedBody extends StatelessWidget {
+  final RaceEngineerAdviceState state;
+
+  const _RateLimitedBody({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final response = state.response;
+    final providerInfo = response?.providerInfo;
+
+    String warning = 'AI provider is rate-limited.';
+    if (providerInfo?.retryAfterSeconds case final seconds?) {
+      warning = 'AI provider is rate-limited. Try again in ~${seconds}s.';
+    }
+
+    final name = providerInfo?.providerName ?? providerInfo?.provider;
+    final model = providerInfo?.model;
+    final providerDetail = [name, model].whereType<String>().join(', ');
+    if (providerDetail.isNotEmpty) {
+      warning = '$warning\n$providerDetail';
+    }
+
+    final hasFallbackMessage =
+        state.message != null && state.message!.trim().isNotEmpty;
+    final referencedEvents = response?.referencedEvents ?? const <String>[];
+    final hasReferencedEvents = referencedEvents.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.warning.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            warning,
+            style: AppTypography.inter(
+              size: 10,
+              height: 1.3,
+              color: AppColors.warning,
+            ),
+          ),
+        ),
+        if (hasFallbackMessage) ...[
+          const SizedBox(height: 8),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Text(
+                state.message!,
+                style: AppTypography.inter(
+                  size: 12,
+                  height: 1.35,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ),
+        ],
+        if (hasReferencedEvents)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              '${referencedEvents.length} events referenced',
+              style: AppTypography.inter(size: 9, color: AppColors.textDim),
+            ),
+          ),
+      ],
+    );
   }
 }
 
