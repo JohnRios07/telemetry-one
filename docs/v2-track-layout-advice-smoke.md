@@ -72,19 +72,21 @@ Expected:
 ```bash
 curl -s -X POST http://129.213.127.143:8081/api/v1/sessions/$SESSION_ID/race-engineer/advice \
   -H 'Content-Type: application/json' \
-  -d '{"maxEvents":5}' | jq '{status, message, referencedEvents, window, providerInfo}'
+  -d '{"maxEvents":5}' | jq '{sessionId, status, message, advice, referencedEvents, window, providerInfo}'
 ```
 
 Expected:
 - Advice succeeds when there are stored engineer events
+- Response includes `sessionId`, `status`, `message` or `advice`, `referencedEvents`, `window`, and `providerInfo`
 - If a selected event window is missing track/layout refs, the backend still uses `detectedTrackId` and `detectedLayoutId` from the session
 - `referencedEvents` identifies the stored events that informed the advice
 
 7. Verify real-provider handling only when OpenRouter is enabled:
 
-- Success path: `status: "success"` and `window.providerCalled: true`
+- Success path: `status: "success"` and provider metadata is reflected in `providerInfo` when available
 - Rate limit path: `status: "rate_limited"`
-- Other provider failures may surface as `provider_error`, `budget_limited`, or `invalid_response` with safe fallback text
+- Provider failure path: `status: "provider_error"` with safe fallback text
+- Do not expect `budget_limited` or `invalid_response` from the current contract
 
 ## Failure Triage
 
@@ -96,7 +98,7 @@ Expected:
 | Events have null refs | Events were emitted before detection settled | Re-run `/events?lapNumber=1` after detection |
 | Advice returns `no_events` | No stored engineer events in the selected window | Not a transport failure; drive more or widen `sinceUnixMs` |
 | Advice returns `rate_limited` | OpenRouter throttled the request | Retry later; do not treat as a device failure |
-| Advice returns `provider_error` or `invalid_response` | Provider/config issue | Check backend OpenRouter config and logs |
+| Advice returns `provider_error` | Provider/config issue | Check backend OpenRouter config and logs |
 
 ## Notes
 
