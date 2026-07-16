@@ -155,7 +155,9 @@ void main() {
       expect(find.text('Ask Engineer'), findsOneWidget);
     });
 
-    testWidgets('renders rate_limited without fallback message', (tester) async {
+    testWidgets('renders rate_limited without fallback message', (
+      tester,
+    ) async {
       await _pumpPanel(
         tester,
         const RaceEngineerAdviceState(
@@ -163,6 +165,7 @@ void main() {
           response: RaceEngineerAdviceResponse(
             sessionId: 'session_test_1',
             status: 'rate_limited',
+            referencedEvents: ['event_1', 'event_2'],
             providerInfo: RaceEngineerProviderInfo(retryAfterSeconds: 60),
           ),
         ),
@@ -170,6 +173,32 @@ void main() {
 
       expect(find.textContaining('60'), findsOneWidget);
       expect(find.textContaining('rate-limited'), findsOneWidget);
+      expect(find.text('2 events referenced'), findsOneWidget);
+    });
+
+    testWidgets('disables ask while rate-limit cooldown is active', (
+      tester,
+    ) async {
+      final notifier = await _pumpPanel(
+        tester,
+        RaceEngineerAdviceState(
+          status: RaceEngineerAdviceStatus.rateLimited,
+          response: const RaceEngineerAdviceResponse(
+            sessionId: 'session_test_1',
+            status: 'rate_limited',
+            providerInfo: RaceEngineerProviderInfo(retryAfterSeconds: 60),
+          ),
+          cooldownExpiresAt: DateTime.now().add(const Duration(seconds: 60)),
+        ),
+      );
+
+      expect(find.text('Retry in 60s'), findsOneWidget);
+      expect(find.textContaining('cooling down'), findsOneWidget);
+
+      await tester.tap(find.text('Retry in 60s'));
+      await tester.pump();
+
+      expect(notifier.requestCount, 0);
     });
 
     testWidgets('renders error retry state', (tester) async {

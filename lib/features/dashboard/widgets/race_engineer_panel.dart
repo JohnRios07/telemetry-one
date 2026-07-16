@@ -13,7 +13,12 @@ class RaceEngineerPanel extends ConsumerWidget {
     final state = ref.watch(raceEngineerAdviceProvider);
     final availability = ref.watch(raceEngineerAdviceAvailabilityProvider);
     final loading = state.status == RaceEngineerAdviceStatus.loading;
-    final canRequest = !loading && availability.canRequest;
+    final cooldownSeconds = state.remainingCooldownSeconds();
+    final canRequest =
+        !loading && availability.canRequest && cooldownSeconds == null;
+    final cooldownMessage = cooldownSeconds != null
+        ? 'Race Engineer is cooling down. Retry in ${cooldownSeconds}s.'
+        : null;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -39,7 +44,7 @@ class RaceEngineerPanel extends ConsumerWidget {
                 ),
               ),
               _ActionButton(
-                label: _buttonLabel(state.status),
+                label: _buttonLabel(state.status, cooldownSeconds),
                 enabled: canRequest,
                 onPressed: () => ref
                     .read(raceEngineerAdviceProvider.notifier)
@@ -47,10 +52,10 @@ class RaceEngineerPanel extends ConsumerWidget {
               ),
             ],
           ),
-          if (availability.message != null) ...[
+          if (cooldownMessage != null || availability.message != null) ...[
             const SizedBox(height: 6),
             Text(
-              availability.message!,
+              cooldownMessage ?? availability.message!,
               style: AppTypography.inter(
                 size: 10,
                 height: 1.25,
@@ -66,7 +71,9 @@ class RaceEngineerPanel extends ConsumerWidget {
   }
 }
 
-String _buttonLabel(RaceEngineerAdviceStatus status) {
+String _buttonLabel(RaceEngineerAdviceStatus status, int? cooldownSeconds) {
+  if (cooldownSeconds != null) return 'Retry in ${cooldownSeconds}s';
+
   return switch (status) {
     RaceEngineerAdviceStatus.success => 'Refresh',
     _ => 'Ask Engineer',
@@ -175,6 +182,8 @@ class _RateLimitedBody extends StatelessWidget {
 
     final hasFallbackMessage =
         state.message != null && state.message!.trim().isNotEmpty;
+    final referencedEvents = response?.referencedEvents ?? const <String>[];
+    final hasReferencedEvents = referencedEvents.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -208,16 +217,15 @@ class _RateLimitedBody extends StatelessWidget {
               ),
             ),
           ),
-          if (response?.referencedEvents case final events?
-              when events.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                '${events.length} events referenced',
-                style: AppTypography.inter(size: 9, color: AppColors.textDim),
-              ),
-            ),
         ],
+        if (hasReferencedEvents)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              '${referencedEvents.length} events referenced',
+              style: AppTypography.inter(size: 9, color: AppColors.textDim),
+            ),
+          ),
       ],
     );
   }

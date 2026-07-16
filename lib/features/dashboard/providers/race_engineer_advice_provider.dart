@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/backend/backend_client.dart';
@@ -33,11 +35,13 @@ class RaceEngineerAdviceState {
   final RaceEngineerAdviceStatus status;
   final RaceEngineerAdviceResponse? response;
   final String? message;
+  final DateTime? cooldownExpiresAt;
 
   const RaceEngineerAdviceState({
     this.status = RaceEngineerAdviceStatus.idle,
     this.response,
     this.message,
+    this.cooldownExpiresAt,
   });
 
   const RaceEngineerAdviceState.idle() : this();
@@ -46,18 +50,38 @@ class RaceEngineerAdviceState {
     RaceEngineerAdviceStatus? status,
     RaceEngineerAdviceResponse? response,
     String? message,
+    Object? cooldownExpiresAt = _unchanged,
   }) {
     return RaceEngineerAdviceState(
       status: status ?? this.status,
       response: response ?? this.response,
       message: message ?? this.message,
+      cooldownExpiresAt: cooldownExpiresAt == _unchanged
+          ? this.cooldownExpiresAt
+          : cooldownExpiresAt as DateTime?,
     );
   }
+
+  bool isCooldownActive([DateTime? now]) {
+    final expiresAt = cooldownExpiresAt;
+    return expiresAt != null && expiresAt.isAfter(now ?? DateTime.now());
+  }
+
+  int? remainingCooldownSeconds([DateTime? now]) {
+    final expiresAt = cooldownExpiresAt;
+    if (expiresAt == null) return null;
+    final remaining = expiresAt.difference(now ?? DateTime.now());
+    if (remaining.inMilliseconds <= 0) return null;
+    return (remaining.inMilliseconds / 1000).ceil();
+  }
 }
+
+const Object _unchanged = Object();
 
 class RaceEngineerAdviceNotifier
     extends StateNotifier<RaceEngineerAdviceState> {
   final Ref _ref;
+  Timer? _cooldownTimer;
 
   RaceEngineerAdviceNotifier(this._ref)
     : super(const RaceEngineerAdviceState.idle());
@@ -66,6 +90,7 @@ class RaceEngineerAdviceNotifier
     RaceEngineerAdviceRequest request = const RaceEngineerAdviceRequest(),
   }) async {
     if (state.status == RaceEngineerAdviceStatus.loading) return;
+    if (state.isCooldownActive()) return;
 
     final availability = _ref.read(raceEngineerAdviceAvailabilityProvider);
     if (!availability.canRequest) {
@@ -87,6 +112,7 @@ class RaceEngineerAdviceNotifier
           .requestRaceEngineerAdvice(sessionId, request);
 
       if (response.hasNoEvents) {
+        _clearCooldownTimer();
         state = RaceEngineerAdviceState(
           status: RaceEngineerAdviceStatus.noEvents,
           response: response,
@@ -96,30 +122,68 @@ class RaceEngineerAdviceNotifier
       }
 
       if (response.isRateLimited) {
+        final cooldownExpiresAt = _cooldownExpiresAt(response);
+        _scheduleCooldownExpiry(cooldownExpiresAt);
         state = RaceEngineerAdviceState(
           status: RaceEngineerAdviceStatus.rateLimited,
           response: response,
           message: response.message ?? response.advice,
+          cooldownExpiresAt: cooldownExpiresAt,
         );
         return;
       }
 
+      _clearCooldownTimer();
       state = RaceEngineerAdviceState(
         status: RaceEngineerAdviceStatus.success,
         response: response,
         message: response.message ?? response.advice,
       );
     } on BackendRequestException catch (e) {
+      _clearCooldownTimer();
       state = RaceEngineerAdviceState(
         status: RaceEngineerAdviceStatus.error,
         message: e.error.message,
       );
     } on Exception catch (e) {
+      _clearCooldownTimer();
       state = RaceEngineerAdviceState(
         status: RaceEngineerAdviceStatus.error,
         message: e.toString(),
       );
     }
+  }
+
+  @override
+  void dispose() {
+    _clearCooldownTimer();
+    super.dispose();
+  }
+
+  DateTime? _cooldownExpiresAt(RaceEngineerAdviceResponse response) {
+    final seconds = response.providerInfo?.retryAfterSeconds;
+    if (seconds == null || seconds <= 0) return null;
+    return DateTime.now().add(Duration(seconds: seconds));
+  }
+
+  void _scheduleCooldownExpiry(DateTime? expiresAt) {
+    _clearCooldownTimer();
+    if (expiresAt == null) return;
+
+    final duration = expiresAt.difference(DateTime.now());
+    if (duration.inMilliseconds <= 0) return;
+
+    _cooldownTimer = Timer(duration, () {
+      if (!mounted) return;
+      if (!state.isCooldownActive()) {
+        state = state.copyWith(cooldownExpiresAt: null);
+      }
+    });
+  }
+
+  void _clearCooldownTimer() {
+    _cooldownTimer?.cancel();
+    _cooldownTimer = null;
   }
 }
 
