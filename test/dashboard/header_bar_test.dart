@@ -207,6 +207,32 @@ void main() {
 
       expect(find.text('CIRCUIT UNKNOWN'), findsOneWidget);
     });
+
+    testWidgets('stale track detection is invalidated when recording starts',
+        (tester) async {
+      useWideScreen(tester);
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        buildHeaderApp(
+          trackDetectionOverride: TrackDetectionResponse(
+            status: 'detected',
+            trackName: 'Suzuka Circuit',
+          ),
+          sessionOverride: _MockSessionRecorder(const SessionState()),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Suzuka Circuit'), findsOneWidget);
+
+      await tester.tap(find.text('RECORD'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Suzuka Circuit'), findsOneWidget);
+    });
   });
 }
 

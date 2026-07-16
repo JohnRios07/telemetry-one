@@ -80,6 +80,13 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
       );
     });
 
+    ref.listen(sessionRecorderProvider, (SessionState? prev, SessionState next) {
+      final wasRecording = prev?.isRecording ?? false;
+      if (!wasRecording && next.isRecording) {
+        ref.invalidate(backendTrackDetectionProvider);
+      }
+    });
+
     return Container(
       height: 54,
       padding: const EdgeInsets.symmetric(horizontal: 16),
