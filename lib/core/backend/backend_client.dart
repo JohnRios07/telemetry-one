@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'backend_config.dart';
+import 'settings_bootstrap_dto.dart';
 import 'telemetry_frame_dto.dart';
 
 class BackendClient {
@@ -133,6 +134,69 @@ class BackendClient {
         error: BackendError(
           code: 'network_error',
           message: 'Connection failed: ${e.message}',
+        ),
+      );
+    }
+  }
+
+  Future<SettingsBootstrapResponse> getSettingsBootstrap() async {
+    final uri = Uri.parse('${config.apiBase}/settings/bootstrap');
+
+    try {
+      final request = await _client.getUrl(uri);
+      final response = await request.close();
+      final body = await utf8.decodeStream(response);
+
+      if (response.statusCode == 200) {
+        try {
+          return SettingsBootstrapResponse.fromJson(
+            jsonDecode(body) as Map<String, dynamic>,
+          );
+        } on SettingsBootstrapContractException catch (e) {
+          throw BackendRequestException(
+            statusCode: response.statusCode,
+            error: BackendError(
+              code: 'invalid_api_version',
+              message: e.message,
+            ),
+          );
+        } on FormatException catch (e) {
+          throw BackendRequestException(
+            statusCode: response.statusCode,
+            error: BackendError(
+              code: 'parse_error',
+              message: 'Invalid bootstrap payload: ${e.message}',
+            ),
+          );
+        } on TypeError catch (e) {
+          throw BackendRequestException(
+            statusCode: response.statusCode,
+            error: BackendError(
+              code: 'parse_error',
+              message: 'Invalid bootstrap payload: $e',
+            ),
+          );
+        }
+      }
+
+      throw BackendRequestException(
+        statusCode: response.statusCode,
+        error: BackendError.parse(body),
+      );
+    } on SocketException catch (e) {
+      throw BackendRequestException(
+        statusCode: 0,
+        error: BackendError(
+          code: 'network_error',
+          message: 'Connection failed: ${e.message}',
+        ),
+      );
+    } on HttpException catch (e) {
+      throw BackendRequestException(
+        statusCode: 0,
+        error: BackendError(
+          code: 'http_error',
+          message: 'HTTP error: ${e.message}',
         ),
       );
     }

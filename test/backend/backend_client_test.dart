@@ -6,6 +6,22 @@ import 'package:telemetry_one/core/backend/backend_config.dart';
 import 'package:telemetry_one/core/backend/telemetry_frame_dto.dart';
 
 void main() {
+  Map<String, dynamic> settingsBootstrapPayload({
+    String apiVersion = 'telemetry-one.api.v2',
+    Map<String, dynamic>? bootstrap,
+  }) {
+    return {
+      'apiVersion': apiVersion,
+      'bootstrap':
+          bootstrap ??
+          {
+            'clientHints': {'alias': 'alex', 'units': 'metric'},
+            'limits': {'maxBatchFrames': 600, 'retainedFramesPerSession': 1200},
+            'capabilities': {'readOnly': true, 'partialIngest': true},
+          },
+    };
+  }
+
   group('CreateSessionRequest toJson', () {
     test('omits trackId when null', () {
       final request = CreateSessionRequest(
@@ -713,6 +729,95 @@ void main() {
       }
 
       expect(callCount, 1);
+    });
+
+    test('getSettingsBootstrap returns parsed response', () async {
+      final server2 = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final port2 = server2.port;
+
+      server2.listen((HttpRequest request) {
+        expect(request.method, 'GET');
+        expect(request.uri.path, '/api/v1/settings/bootstrap');
+
+        request.response.statusCode = 200;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(jsonEncode(settingsBootstrapPayload()));
+        request.response.close();
+      });
+
+      final client = BackendClient(
+        config: BackendConfig(baseUrl: 'http://127.0.0.1:$port2'),
+      );
+
+      final response = await client.getSettingsBootstrap();
+
+      expect(response.apiVersion, 'telemetry-one.api.v2');
+      expect(response.bootstrap.clientHints.values['alias'], 'alex');
+      expect(response.bootstrap.limits.values['maxBatchFrames'], 600);
+      expect(response.bootstrap.capabilities.values['readOnly'], isTrue);
+
+      client.dispose();
+      await server2.close(force: true);
+    });
+
+    test('getSettingsBootstrap fails closed on missing apiVersion', () async {
+      final server2 = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final port2 = server2.port;
+
+      server2.listen((HttpRequest request) {
+        request.response.statusCode = 200;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(jsonEncode({
+          'bootstrap': {
+            'clientHints': {'alias': 'alex'},
+            'limits': {},
+            'capabilities': {},
+          },
+        }));
+        request.response.close();
+      });
+
+      final client = BackendClient(
+        config: BackendConfig(baseUrl: 'http://127.0.0.1:$port2'),
+      );
+
+      try {
+        await client.getSettingsBootstrap();
+        fail('Expected BackendRequestException');
+      } on BackendRequestException catch (e) {
+        expect(e.error.code, 'invalid_api_version');
+      } finally {
+        client.dispose();
+        await server2.close(force: true);
+      }
+    });
+
+    test('getSettingsBootstrap fails closed on wrong apiVersion', () async {
+      final server2 = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final port2 = server2.port;
+
+      server2.listen((HttpRequest request) {
+        request.response.statusCode = 200;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(jsonEncode(
+          settingsBootstrapPayload(apiVersion: 'telemetry-one.api.v1'),
+        ));
+        request.response.close();
+      });
+
+      final client = BackendClient(
+        config: BackendConfig(baseUrl: 'http://127.0.0.1:$port2'),
+      );
+
+      try {
+        await client.getSettingsBootstrap();
+        fail('Expected BackendRequestException');
+      } on BackendRequestException catch (e) {
+        expect(e.error.code, 'invalid_api_version');
+      } finally {
+        client.dispose();
+        await server2.close(force: true);
+      }
     });
   });
 }

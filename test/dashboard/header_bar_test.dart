@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:telemetry_one/core/backend/backend_client.dart';
+import 'package:telemetry_one/core/backend/backend_config.dart';
 import 'package:telemetry_one/core/backend/telemetry_frame_dto.dart';
+import 'package:telemetry_one/core/backend/settings_bootstrap_dto.dart';
 import 'package:telemetry_one/core/backend/v2_bridge_providers.dart';
+import 'package:telemetry_one/core/backend/backend_sync_provider.dart';
 import 'package:telemetry_one/features/dashboard/providers/session_provider.dart';
 import 'package:telemetry_one/features/dashboard/widgets/header_bar.dart';
 
@@ -15,6 +19,7 @@ void useWideScreen(WidgetTester tester) {
 Widget buildHeaderApp({
   Object? trackDetectionOverride,
   Object? sessionOverride,
+  BackendClient? backendClientOverride,
 }) {
   final overrides = <Override>[];
   if (trackDetectionOverride != null) {
@@ -32,6 +37,9 @@ Widget buildHeaderApp({
         (_) => sessionOverride as SessionRecorder,
       ),
     );
+  }
+  if (backendClientOverride != null) {
+    overrides.add(backendClientProvider.overrideWithValue(backendClientOverride));
   }
   return ProviderScope(
     overrides: overrides,
@@ -233,6 +241,24 @@ void main() {
 
       expect(find.text('Suzuka Circuit'), findsOneWidget);
     });
+
+    testWidgets('settings icon opens the settings screen', (tester) async {
+      useWideScreen(tester);
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        buildHeaderApp(backendClientOverride: _FakeSettingsClient()),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.settings_rounded));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Settings'), findsOneWidget);
+      expect(find.text('CLIENT HINTS'), findsOneWidget);
+    });
   });
 }
 
@@ -244,5 +270,22 @@ class _MockSessionRecorder extends SessionRecorder {
   @override
   void dispose() {
     // No-op to avoid referencing uninitialized test fields.
+  }
+}
+
+class _FakeSettingsClient extends BackendClient {
+  _FakeSettingsClient()
+    : super(config: const BackendConfig(baseUrl: 'http://example.test'));
+
+  @override
+  Future<SettingsBootstrapResponse> getSettingsBootstrap() async {
+    return const SettingsBootstrapResponse(
+      apiVersion: settingsBootstrapApiVersion,
+      bootstrap: SettingsBootstrap(
+        clientHints: SettingsBootstrapSection(values: {'alias': 'alex'}),
+        limits: SettingsBootstrapSection(values: {'maxBatchFrames': 600}),
+        capabilities: SettingsBootstrapSection(values: {'readOnly': true}),
+      ),
+    );
   }
 }

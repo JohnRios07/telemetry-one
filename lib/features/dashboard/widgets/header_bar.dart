@@ -8,6 +8,7 @@ import '../../../../config/theme/app_typography.dart';
 import '../../../../core/backend/telemetry_frame_dto.dart';
 import '../../../../core/backend/v2_bridge_providers.dart';
 import '../../engineer/screens/engineer_sessions_screen.dart';
+import '../../settings/screens/settings_screen.dart';
 import '../providers/session_provider.dart';
 import '../providers/telemetry_provider.dart';
 import 'v2_sync_badge.dart';
@@ -252,7 +253,14 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
 
           const SizedBox(width: 18),
 
-          Icon(Icons.settings_rounded, color: AppColors.textDim, size: 20),
+          IconButton(
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings_rounded, size: 20),
+            color: AppColors.textDim,
+            tooltip: 'Settings',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+          ),
         ],
       ),
     );
@@ -265,6 +273,12 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
   void _openEngineer() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const EngineerSessionsScreen()),
+    );
+  }
+
+  void _openSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
     );
   }
 

@@ -146,10 +146,17 @@ With the V2 command from Step 2 running:
 5. No-events response:
    - Expected: panel shows **NO EVENTS** copy and does not treat it as a failure.
 6. Backend error or unreachable backend:
-   - Expected: panel shows **UNAVAILABLE** with retry copy.
-   - Press **Ask Engineer** again only when you want a manual retry; there is no polling or auto-refresh.
+    - Expected: panel shows **UNAVAILABLE** with retry copy.
+    - Press **Ask Engineer** again only when you want a manual retry; there is no polling or auto-refresh.
 
-## Step 9 — Rollback test (backend failure)
+## Step 9 — Settings bootstrap smoke
+
+1. Tap the settings icon in the HeaderBar.
+2. Expected: a read-only settings screen opens with `CLIENT HINTS`, `LIMITS`, and `CAPABILITIES` sections.
+3. Expected: no persisted settings controls, provider keys, prompts, or raw telemetry are shown.
+4. If the backend is offline or returns an invalid bootstrap version, expected: a retryable error state.
+
+## Step 10 — Rollback test (backend failure)
 
 Simulate a backend failure by stopping the backend or providing an unreachable URL:
 
