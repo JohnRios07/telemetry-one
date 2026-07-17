@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telemetry_one/core/backend/backend_client.dart';
 import 'package:telemetry_one/core/backend/backend_config.dart';
+import 'package:telemetry_one/core/backend/track_layout_dto.dart';
 import 'package:telemetry_one/core/backend/telemetry_frame_dto.dart';
 
 void main() {
@@ -309,6 +310,45 @@ void main() {
             ],
           }));
           request.response.close();
+        } else if (path.endsWith('/catalog/track-layouts') &&
+            request.method == 'GET') {
+          request.response.statusCode = 200;
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(jsonEncode({
+            'data': {
+              'tracks': [
+                {
+                  'trackId': 'gt7_watkins_glen_international',
+                  'trackName': 'Watkins Glen International',
+                  'layouts': [
+                    {
+                      'layoutId': 'full_course',
+                      'layoutName': 'Full Course',
+                    },
+                    {
+                      'layoutId': 'boot',
+                      'layoutName': 'Boot',
+                    },
+                  ],
+                },
+              ],
+            },
+          }));
+          request.response.close();
+        } else if (path.endsWith('/track-layout') && request.method == 'PUT') {
+          final json = jsonDecode(body) as Map<String, dynamic>;
+          request.response.statusCode = 200;
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(jsonEncode({
+            'session': {
+              'sessionId': 'session_test_1',
+              'trackId': json['trackId'],
+              'layoutId': json['layoutId'],
+              'detectedTrackId': 'detected_track_id',
+              'detectedLayoutId': 'detected_layout_id',
+            },
+          }));
+          request.response.close();
         } else if (path.endsWith('/race-engineer/advice') &&
             request.method == 'POST') {
           request.response.statusCode = 200;
@@ -388,6 +428,57 @@ void main() {
 
       expect(events, hasLength(1));
       expect(events.first.lapNumber, 2);
+    });
+
+    test('getTrackLayouts returns sourced catalog', () async {
+      final response = await _client.getTrackLayouts();
+
+      expect(response.tracks, hasLength(1));
+      expect(
+        response.trackFor('gt7_watkins_glen_international')?.displayName,
+        'Watkins Glen International',
+      );
+      expect(
+        response.trackFor('gt7_watkins_glen_international')
+            ?.layoutFor('boot')
+            ?.displayName,
+        'Boot',
+      );
+
+      expect(_receivedRequests, hasLength(1));
+      expect(
+        _receivedRequests.single['uri'],
+        '/api/v1/catalog/track-layouts',
+      );
+    });
+
+    test('updateSessionTrackLayout posts exact path and body', () async {
+      final response = await _client.updateSessionTrackLayout(
+        'session_test_1',
+        'gt7_watkins_glen_international',
+        'full_course',
+      );
+
+      expect(response.sessionId, 'session_test_1');
+      expect(response.trackId, 'gt7_watkins_glen_international');
+      expect(response.layoutId, 'full_course');
+      expect(response.detectedTrackId, 'detected_track_id');
+      expect(response.detectedLayoutId, 'detected_layout_id');
+      expect(_receivedRequests, hasLength(1));
+      expect(
+        _receivedRequests.single['uri'],
+        '/api/v1/sessions/session_test_1/track-layout',
+      );
+
+      final body = jsonDecode(_receivedRequests.single['body'] as String)
+          as Map<String, dynamic>;
+      expect(
+        body,
+        {
+          'trackId': 'gt7_watkins_glen_international',
+          'layoutId': 'full_course',
+        },
+      );
     });
 
     test('requestRaceEngineerAdvice posts exact path and safe payload', () async {

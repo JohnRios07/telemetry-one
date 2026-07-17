@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:telemetry_one/core/backend/backend_client.dart';
 import 'package:telemetry_one/core/backend/backend_config.dart';
 import 'package:telemetry_one/core/backend/telemetry_frame_dto.dart';
+import 'package:telemetry_one/core/backend/track_layout_dto.dart';
 import 'package:telemetry_one/core/backend/settings_bootstrap_dto.dart';
 import 'package:telemetry_one/core/backend/v2_bridge_providers.dart';
 import 'package:telemetry_one/core/backend/backend_sync_provider.dart';
@@ -19,9 +20,16 @@ void useWideScreen(WidgetTester tester) {
 Widget buildHeaderApp({
   Object? trackDetectionOverride,
   Object? sessionOverride,
+  BackendSyncNotifier? syncOverride,
   BackendClient? backendClientOverride,
+  BackendConfig? backendConfigOverride,
 }) {
   final overrides = <Override>[];
+  overrides.add(
+    backendConfigProvider.overrideWithValue(
+      backendConfigOverride ?? const BackendConfig(),
+    ),
+  );
   if (trackDetectionOverride != null) {
     overrides.add(
       backendTrackDetectionProvider.overrideWith(
@@ -41,6 +49,13 @@ Widget buildHeaderApp({
   if (backendClientOverride != null) {
     overrides.add(backendClientProvider.overrideWithValue(backendClientOverride));
   }
+  overrides.add(
+    backendSyncProvider.overrideWith(
+      (_) =>
+          syncOverride ??
+          _MockSyncNotifier(const BackendSyncState(sessionId: 'local_test')),
+    ),
+  );
   return ProviderScope(
     overrides: overrides,
     child: const MaterialApp(
@@ -259,6 +274,59 @@ void main() {
       expect(find.text('Settings'), findsOneWidget);
       expect(find.text('CLIENT HINTS'), findsOneWidget);
     });
+
+    testWidgets('manual track selection opens, submits, and reflects badge',
+        (tester) async {
+      useWideScreen(tester);
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final syncNotifier = _MockSyncNotifier(
+        const BackendSyncState(
+          sessionId: 'local_test',
+          backendSessionId: 'session_abc123',
+          alignmentStatus: SessionAlignmentStatus.created,
+        ),
+      );
+      final client = _FakeManualTrackClient();
+
+      await tester.pumpWidget(
+        buildHeaderApp(
+          trackDetectionOverride: TrackDetectionResponse(status: 'unknown'),
+          backendClientOverride: client,
+          syncOverride: syncNotifier,
+          backendConfigOverride: const BackendConfig(useV2Data: true),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.widgetWithText(TextButton, 'MANUAL'), findsOneWidget);
+      expect(find.text('MANUAL'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'MANUAL'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('Manual Track Selection'), findsOneWidget);
+      expect(find.text('Watkins Glen International'), findsOneWidget);
+
+      await tester.tap(find.text('Watkins Glen International'));
+      await tester.pump();
+      await tester.ensureVisible(find.text('Full Course'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('Full Course'));
+      await tester.pump();
+      await tester.ensureVisible(find.widgetWithText(ElevatedButton, 'Apply'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Apply'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(client.updateCalls, 1);
+      expect(find.textContaining('Watkins Glen International · Full Course'),
+          findsOneWidget);
+      expect(find.text('CIRCUIT UNKNOWN'), findsOneWidget);
+    });
   });
 }
 
@@ -288,4 +356,52 @@ class _FakeSettingsClient extends BackendClient {
       ),
     );
   }
+}
+
+class _FakeManualTrackClient extends BackendClient {
+  int updateCalls = 0;
+
+  _FakeManualTrackClient()
+    : super(config: const BackendConfig(baseUrl: 'http://example.test'));
+
+  @override
+  Future<TrackLayoutsCatalogResponse> getTrackLayouts() async {
+    return const TrackLayoutsCatalogResponse(
+      tracks: [
+        TrackCatalogTrack(
+          trackId: 'gt7_watkins_glen_international',
+          trackName: 'Watkins Glen International',
+          layouts: [
+            TrackCatalogLayout(layoutId: 'full_course', layoutName: 'Full Course'),
+          ],
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<UpdateSessionTrackLayoutResponse> updateSessionTrackLayout(
+    String sessionId,
+    String trackId,
+    String layoutId,
+  ) async {
+    updateCalls++;
+    return UpdateSessionTrackLayoutResponse(
+      sessionId: sessionId,
+      trackId: trackId,
+      layoutId: layoutId,
+      detectedTrackId: 'detected_track_id',
+      detectedLayoutId: 'detected_layout_id',
+    );
+  }
+}
+
+class _MockSyncNotifier extends BackendSyncNotifier {
+  _MockSyncNotifier(BackendSyncState state)
+    : super(config: const BackendConfig()) {
+    this.state = state;
+  }
+
+  @override
+  void dispose() {}
 }
