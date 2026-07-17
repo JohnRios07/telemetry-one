@@ -3,6 +3,11 @@ import 'dart:convert';
 Map<String, dynamic> _responsePayload(Map<String, dynamic> json) {
   final data = json['data'];
   if (data is Map<String, dynamic>) {
+    final nestedSession = data['session'];
+    if (nestedSession is Map<String, dynamic>) {
+      return nestedSession;
+    }
+
     return data;
   }
 

@@ -340,12 +340,14 @@ void main() {
           request.response.statusCode = 200;
           request.response.headers.contentType = ContentType.json;
           request.response.write(jsonEncode({
-            'session': {
-              'sessionId': 'session_test_1',
-              'trackId': json['trackId'],
-              'layoutId': json['layoutId'],
-              'detectedTrackId': 'detected_track_id',
-              'detectedLayoutId': 'detected_layout_id',
+            'data': {
+              'session': {
+                'sessionId': 'session_test_1',
+                'trackId': json['trackId'],
+                'layoutId': json['layoutId'],
+                'detectedTrackId': 'detected_track_id',
+                'detectedLayoutId': 'detected_layout_id',
+              },
             },
           }));
           request.response.close();

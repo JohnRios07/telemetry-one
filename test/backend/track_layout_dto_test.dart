@@ -43,14 +43,16 @@ void main() {
   });
 
   group('UpdateSessionTrackLayoutResponse', () {
-    test('parses session response and provenance ids', () {
+    test('parses wrapped data.session response and provenance ids', () {
       final response = UpdateSessionTrackLayoutResponse.fromJson({
-        'session': {
-          'sessionId': 'session_abc123',
-          'trackId': 'gt7_watkins_glen_international',
-          'layoutId': 'full_course',
-          'detectedTrackId': 'detected_track',
-          'detectedLayoutId': 'detected_layout',
+        'data': {
+          'session': {
+            'sessionId': 'session_abc123',
+            'trackId': 'gt7_watkins_glen_international',
+            'layoutId': 'full_course',
+            'detectedTrackId': 'detected_track',
+            'detectedLayoutId': 'detected_layout',
+          },
         },
       });
 
@@ -59,6 +61,22 @@ void main() {
       expect(response.layoutId, 'full_course');
       expect(response.detectedTrackId, 'detected_track');
       expect(response.detectedLayoutId, 'detected_layout');
+    });
+
+    test('parses direct session response', () {
+      final response = UpdateSessionTrackLayoutResponse.fromJson({
+        'session': {
+          'sessionId': 'session_def456',
+          'trackId': 'gt7_suzuka_circuit',
+          'layoutId': 'full_course',
+        },
+      });
+
+      expect(response.sessionId, 'session_def456');
+      expect(response.trackId, 'gt7_suzuka_circuit');
+      expect(response.layoutId, 'full_course');
+      expect(response.detectedTrackId, isNull);
+      expect(response.detectedLayoutId, isNull);
     });
 
     test('throws when required ids are missing', () {
