@@ -45,8 +45,11 @@ void main() {
       expect(frame.steeringAngle, -0.12);
 
       final json = frame.toJson();
-      expect(json.keys.contains('steeringAngle'), isFalse,
-          reason: 'backend DisallowUnknownFields rejects steeringAngle key');
+      expect(
+        json.keys.contains('steeringAngle'),
+        isFalse,
+        reason: 'backend DisallowUnknownFields rejects steeringAngle key',
+      );
       expect(json['steering'], -0.12);
     });
 
@@ -70,8 +73,11 @@ void main() {
         'isOnTrack',
       ];
       for (final key in required) {
-        expect(json.containsKey(key), isTrue,
-            reason: 'Required key $key missing from toJson()');
+        expect(
+          json.containsKey(key),
+          isTrue,
+          reason: 'Required key $key missing from toJson()',
+        );
       }
     });
 
@@ -130,9 +136,13 @@ void main() {
       };
 
       for (final key in json.keys) {
-        expect(knownKeys.contains(key), isTrue,
-            reason: 'Unknown key $key in toJson() — '
-                'backend DisallowUnknownFields would reject');
+        expect(
+          knownKeys.contains(key),
+          isTrue,
+          reason:
+              'Unknown key $key in toJson() — '
+              'backend DisallowUnknownFields would reject',
+        );
       }
     });
   });
@@ -166,6 +176,127 @@ void main() {
       expect(frameJson.containsKey('steering'), isTrue);
       expect(frameJson.containsKey('steeringAngle'), isFalse);
       expect(frameJson['steering'], -0.05);
+    });
+  });
+
+  group('backend response DTO parsing', () {
+    const apiVersion = 'telemetry-one.api.v2';
+
+    Map<String, dynamic> ingestPayload() => {
+      'sessionId': 'session_test',
+      'receivedFrames': 2,
+      'acceptedFrames': 2,
+      'rejectedFrames': 0,
+      'acceptedFromUnixMs': 1720656000000,
+      'acceptedToUnixMs': 1720656000123,
+      'status': 'accepted',
+    };
+
+    Map<String, dynamic> trackPayload() => {
+      'status': 'detected',
+      'trackId': 'gt7_watkins_glen_international',
+      'layoutId': 'gt7_layout_1240',
+      'trackName': 'Watkins Glen International',
+      'layoutName': 'Long Course',
+      'confidence': 0.85,
+      'reasons': ['length_match'],
+      'nextAction': 'use_detected_catalog_layout',
+    };
+
+    Map<String, dynamic> advicePayload() => {
+      'sessionId': 'session_test',
+      'status': 'success',
+      'message': 'Brake earlier.',
+      'referencedEvents': ['event_1'],
+      'window': {'sinceUnixMs': null, 'maxEvents': 5},
+      'generatedAtUnixMs': 1720656001000,
+    };
+
+    Map<String, dynamic> eventsPayload() => {
+      'events': [
+        {
+          'eventId': 'event_1',
+          'sessionId': 'session_test',
+          'version': 'telemetry-one.engineer-event.v1',
+          'type': 'late_throttle',
+          'severity': 'medium',
+          'confidence': 0.82,
+          'timestampUnixMs': 1720656012345,
+          'lapNumber': 2,
+          'corner': null,
+          'source': {
+            'kind': 'deterministic_rule',
+            'ruleId': 'late_throttle.v1',
+          },
+        },
+      ],
+    };
+
+    test('accepts legacy payloads without apiVersion', () {
+      final ingest = IngestResponse.fromJson(ingestPayload());
+      final track = TrackDetectionResponse.fromJson(trackPayload());
+      final advice = RaceEngineerAdviceResponse.fromJson(advicePayload());
+      final events = EngineerEvent.listFromResponseJson(eventsPayload());
+
+      expect(ingest.sessionId, 'session_test');
+      expect(track.isDetected, isTrue);
+      expect(advice.referencedEvents, ['event_1']);
+      expect(events.single.source, 'deterministic_rule:late_throttle.v1');
+    });
+
+    test('ignores top-level apiVersion on marked payloads', () {
+      final ingest = IngestResponse.fromJson({
+        'apiVersion': apiVersion,
+        ...ingestPayload(),
+      });
+      final track = TrackDetectionResponse.fromJson({
+        'apiVersion': apiVersion,
+        ...trackPayload(),
+      });
+      final advice = RaceEngineerAdviceResponse.fromJson({
+        'apiVersion': apiVersion,
+        ...advicePayload(),
+      });
+      final events = EngineerEvent.listFromResponseJson({
+        'apiVersion': apiVersion,
+        ...eventsPayload(),
+      });
+
+      expect(ingest.acceptedFrames, 2);
+      expect(track.trackId, 'gt7_watkins_glen_international');
+      expect(advice.status, 'success');
+      expect(events.single.eventId, 'event_1');
+    });
+
+    test('unwraps optional future data envelopes', () {
+      final ingest = IngestResponse.fromJson({
+        'apiVersion': apiVersion,
+        'data': ingestPayload(),
+      });
+      final track = TrackDetectionResponse.fromJson({
+        'apiVersion': apiVersion,
+        'data': trackPayload(),
+      });
+      final create = CreateSessionResponse.fromJson({
+        'apiVersion': apiVersion,
+        'data': {
+          'session': {'id': 'session_created'},
+        },
+      });
+      final finish = FinishSessionResponse.fromJson({
+        'apiVersion': apiVersion,
+        'data': {'status': 'finished'},
+      });
+      final events = EngineerEvent.listFromResponseJson({
+        'apiVersion': apiVersion,
+        'data': eventsPayload(),
+      });
+
+      expect(ingest.status, 'accepted');
+      expect(track.nextAction, 'use_detected_catalog_layout');
+      expect(create.sessionId, 'session_created');
+      expect(finish.status, 'finished');
+      expect(events.single.lapNumber, 2);
     });
   });
 }
