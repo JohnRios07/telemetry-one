@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
+
 import 'backend_config.dart';
 import 'telemetry_frame_dto.dart';
 
@@ -12,8 +14,7 @@ class BackendClient {
     : config = config ?? const BackendConfig();
 
   HttpClient get _client {
-    _sharedClient ??= HttpClient()
-      ..connectionTimeout = config.requestTimeout;
+    _sharedClient ??= HttpClient()..connectionTimeout = config.requestTimeout;
     return _sharedClient!;
   }
 
@@ -76,15 +77,14 @@ class BackendClient {
           statusCode: 0,
           error: BackendError(
             code: 'network_error',
-            message: 'Connection failed after ${config.maxRetries} retries: '
+            message:
+                'Connection failed after ${config.maxRetries} retries: '
                 '${e.message}',
           ),
         );
       } on HttpException catch (e) {
         if (attempt < config.maxRetries) {
-          debugPrint(
-            '[BackendClient] HTTP error (attempt ${attempt + 1}): $e',
-          );
+          debugPrint('[BackendClient] HTTP error (attempt ${attempt + 1}): $e');
           lastError = e.message;
           continue;
         }
@@ -92,7 +92,8 @@ class BackendClient {
           statusCode: 0,
           error: BackendError(
             code: 'http_error',
-            message: 'HTTP error after ${config.maxRetries} retries: '
+            message:
+                'HTTP error after ${config.maxRetries} retries: '
                 '${e.message}',
           ),
         );
@@ -108,9 +109,7 @@ class BackendClient {
     );
   }
 
-  Future<TrackDetectionResponse> getTrackDetection(
-    String sessionId,
-  ) async {
+  Future<TrackDetectionResponse> getTrackDetection(String sessionId) async {
     final uri = Uri.parse('${config.apiBase}/sessions/$sessionId/track');
 
     try {
@@ -192,7 +191,8 @@ class BackendClient {
           statusCode: 0,
           error: BackendError(
             code: 'network_error',
-            message: 'Connection failed after ${config.maxRetries} retries: '
+            message:
+                'Connection failed after ${config.maxRetries} retries: '
                 '${e.message}',
           ),
         );
@@ -209,7 +209,8 @@ class BackendClient {
           statusCode: 0,
           error: BackendError(
             code: 'http_error',
-            message: 'HTTP error after ${config.maxRetries} retries: '
+            message:
+                'HTTP error after ${config.maxRetries} retries: '
                 '${e.message}',
           ),
         );
@@ -279,7 +280,8 @@ class BackendClient {
           statusCode: 0,
           error: BackendError(
             code: 'network_error',
-            message: 'Connection failed after ${config.maxRetries} retries: '
+            message:
+                'Connection failed after ${config.maxRetries} retries: '
                 '${e.message}',
           ),
         );
@@ -296,7 +298,8 @@ class BackendClient {
           statusCode: 0,
           error: BackendError(
             code: 'http_error',
-            message: 'HTTP error after ${config.maxRetries} retries: '
+            message:
+                'HTTP error after ${config.maxRetries} retries: '
                 '${e.message}',
           ),
         );
@@ -351,7 +354,8 @@ class BackendClient {
         statusCode: 0,
         error: BackendError(
           code: 'http_error',
-          message: 'HTTP error after ${config.maxRetries} retries: '
+          message:
+              'HTTP error after ${config.maxRetries} retries: '
               '${e.message}',
         ),
       );
@@ -380,10 +384,7 @@ class BackendClient {
 
       if (response.statusCode == 200) {
         final json = jsonDecode(body) as Map<String, dynamic>;
-        final events = (json['events'] as List<dynamic>?)
-                ?.cast<Map<String, dynamic>>() ??
-            [];
-        return events.map(EngineerEvent.fromJson).toList();
+        return EngineerEvent.listFromResponseJson(json);
       }
 
       throw BackendRequestException(

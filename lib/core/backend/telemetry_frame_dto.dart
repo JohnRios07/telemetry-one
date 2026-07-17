@@ -1,5 +1,13 @@
 import 'dart:convert';
 
+Map<String, dynamic> _responsePayload(Map<String, dynamic> json) {
+  final data = json['data'];
+  if (data is Map<String, dynamic>) {
+    return data;
+  }
+  return json;
+}
+
 class TelemetryFrameDto {
   final int timestampUnixMs;
   final double speedMps;
@@ -82,10 +90,7 @@ class FrameBatchRequest {
   final String sessionId;
   final List<TelemetryFrameDto> frames;
 
-  const FrameBatchRequest({
-    required this.sessionId,
-    required this.frames,
-  });
+  const FrameBatchRequest({required this.sessionId, required this.frames});
 
   Map<String, dynamic> toJson() => {
     'sessionId': sessionId,
@@ -97,10 +102,7 @@ class RejectionReasonCount {
   final String code;
   final int count;
 
-  const RejectionReasonCount({
-    required this.code,
-    required this.count,
-  });
+  const RejectionReasonCount({required this.code, required this.count});
 
   factory RejectionReasonCount.fromJson(Map<String, dynamic> json) {
     return RejectionReasonCount(
@@ -113,15 +115,13 @@ class RejectionReasonCount {
 class RejectionSummary {
   final List<RejectionReasonCount> reasons;
 
-  String? get topReasonCode =>
-      reasons.isNotEmpty ? reasons.first.code : null;
+  String? get topReasonCode => reasons.isNotEmpty ? reasons.first.code : null;
 
   const RejectionSummary({required this.reasons});
 
   factory RejectionSummary.fromJson(Map<String, dynamic> json) {
-    final reasonsList = (json['reasons'] as List<dynamic>?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
+    final reasonsList =
+        (json['reasons'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
     return RejectionSummary(
       reasons: reasonsList.map(RejectionReasonCount.fromJson).toList(),
     );
@@ -154,17 +154,19 @@ class IngestResponse {
   String? get topRejectionCode => rejectionSummary?.topReasonCode;
 
   factory IngestResponse.fromJson(Map<String, dynamic> json) {
+    final payload = _responsePayload(json);
     return IngestResponse(
-      sessionId: json['sessionId'] as String,
-      receivedFrames: (json['receivedFrames'] as num).toInt(),
-      acceptedFrames: (json['acceptedFrames'] as num).toInt(),
-      rejectedFrames: (json['rejectedFrames'] as num).toInt(),
-      acceptedFromUnixMs: (json['acceptedFromUnixMs'] as num).toInt(),
-      acceptedToUnixMs: (json['acceptedToUnixMs'] as num).toInt(),
-      status: json['status'] as String,
-      rejectionSummary: json['rejectionSummary'] != null
+      sessionId: payload['sessionId'] as String,
+      receivedFrames: (payload['receivedFrames'] as num).toInt(),
+      acceptedFrames: (payload['acceptedFrames'] as num).toInt(),
+      rejectedFrames: (payload['rejectedFrames'] as num).toInt(),
+      acceptedFromUnixMs: (payload['acceptedFromUnixMs'] as num).toInt(),
+      acceptedToUnixMs: (payload['acceptedToUnixMs'] as num).toInt(),
+      status: payload['status'] as String,
+      rejectionSummary: payload['rejectionSummary'] != null
           ? RejectionSummary.fromJson(
-              json['rejectionSummary'] as Map<String, dynamic>)
+              payload['rejectionSummary'] as Map<String, dynamic>,
+            )
           : null,
     );
   }
@@ -188,7 +190,8 @@ class IngestRejection {
   bool get isConsistencyCategory => category == 'consistency';
   bool get isRetryable {
     if (isBatchCategory) {
-      return rejectionCode == 'batch_too_large' || rejectionCode == 'frames_empty';
+      return rejectionCode == 'batch_too_large' ||
+          rejectionCode == 'frames_empty';
     }
     return false;
   }
@@ -208,11 +211,7 @@ class BackendError {
   final String message;
   final IngestRejection? details;
 
-  const BackendError({
-    required this.code,
-    required this.message,
-    this.details,
-  });
+  const BackendError({required this.code, required this.message, this.details});
 
   bool get isBadRequest => code == 'bad_request';
   bool get isNotImplemented => code == 'not_implemented';
@@ -220,8 +219,7 @@ class BackendError {
   bool get isSessionNotFound => code == 'session_not_found';
   bool get isSessionFinished => code == 'session_finished';
   bool get isRetryable =>
-    code == 'internal_error' ||
-    code == 'service_unavailable';
+      code == 'internal_error' || code == 'service_unavailable';
 
   factory BackendError.fromJson(Map<String, dynamic> json) {
     final error = json['error'] as Map<String, dynamic>;
@@ -273,15 +271,16 @@ class TrackDetectionResponse {
   bool get isUnknown => status == 'unknown';
 
   factory TrackDetectionResponse.fromJson(Map<String, dynamic> json) {
+    final payload = _responsePayload(json);
     return TrackDetectionResponse(
-      status: json['status'] as String,
-      trackId: json['trackId'] as String?,
-      layoutId: json['layoutId'] as String?,
-      trackName: json['trackName'] as String?,
-      layoutName: json['layoutName'] as String?,
-      confidence: (json['confidence'] as num?)?.toDouble() ?? 0,
-      reasons: (json['reasons'] as List<dynamic>?)?.cast<String>() ?? [],
-      nextAction: json['nextAction'] as String?,
+      status: payload['status'] as String,
+      trackId: payload['trackId'] as String?,
+      layoutId: payload['layoutId'] as String?,
+      trackName: payload['trackName'] as String?,
+      layoutName: payload['layoutName'] as String?,
+      confidence: (payload['confidence'] as num?)?.toDouble() ?? 0,
+      reasons: (payload['reasons'] as List<dynamic>?)?.cast<String>() ?? [],
+      nextAction: payload['nextAction'] as String?,
     );
   }
 }
@@ -324,10 +323,9 @@ class CreateSessionResponse {
   const CreateSessionResponse({required this.sessionId});
 
   factory CreateSessionResponse.fromJson(Map<String, dynamic> json) {
-    final session = json['session'] as Map<String, dynamic>;
-    return CreateSessionResponse(
-      sessionId: session['id'] as String,
-    );
+    final payload = _responsePayload(json);
+    final session = payload['session'] as Map<String, dynamic>;
+    return CreateSessionResponse(sessionId: session['id'] as String);
   }
 }
 
@@ -336,9 +334,7 @@ class FinishSessionRequest {
 
   const FinishSessionRequest({required this.endedUnixMs});
 
-  Map<String, dynamic> toJson() => {
-    'endedUnixMs': endedUnixMs,
-  };
+  Map<String, dynamic> toJson() => {'endedUnixMs': endedUnixMs};
 }
 
 class FinishSessionResponse {
@@ -347,9 +343,8 @@ class FinishSessionResponse {
   const FinishSessionResponse({required this.status});
 
   factory FinishSessionResponse.fromJson(Map<String, dynamic> json) {
-    return FinishSessionResponse(
-      status: json['status'] as String,
-    );
+    final payload = _responsePayload(json);
+    return FinishSessionResponse(status: payload['status'] as String);
   }
 }
 
@@ -357,10 +352,7 @@ class RaceEngineerAdviceRequest {
   final int? sinceUnixMs;
   final int? maxEvents;
 
-  const RaceEngineerAdviceRequest({
-    this.sinceUnixMs,
-    this.maxEvents,
-  });
+  const RaceEngineerAdviceRequest({this.sinceUnixMs, this.maxEvents});
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -450,24 +442,28 @@ class RaceEngineerAdviceResponse {
       providerInfo?.status == 'rate_limited';
 
   factory RaceEngineerAdviceResponse.fromJson(Map<String, dynamic> json) {
+    final payload = _responsePayload(json);
     return RaceEngineerAdviceResponse(
-      sessionId: json['sessionId'] as String,
-      status: json['status'] as String,
-      message: json['message'] as String?,
-      advice: json['advice'] as String?,
+      sessionId: payload['sessionId'] as String,
+      status: payload['status'] as String,
+      message: payload['message'] as String?,
+      advice: payload['advice'] as String?,
       referencedEvents:
-          (json['referencedEvents'] as List<dynamic>?)?.cast<String>() ??
-              (json['referencedEventIds'] as List<dynamic>?)?.cast<String>() ??
-              const [],
-      window: json['window'] != null
+          (payload['referencedEvents'] as List<dynamic>?)?.cast<String>() ??
+          (payload['referencedEventIds'] as List<dynamic>?)?.cast<String>() ??
+          const [],
+      window: payload['window'] != null
           ? RaceEngineerAdviceWindow.fromJson(
-              json['window'] as Map<String, dynamic>)
+              payload['window'] as Map<String, dynamic>,
+            )
           : null,
-      generatedAtUnixMs: (json['generatedAtUnixMs'] as num?)?.toInt() ??
-          _parseGeneratedAtMs(json['generatedAt'] as String?),
-      providerInfo: json['providerInfo'] != null
+      generatedAtUnixMs:
+          (payload['generatedAtUnixMs'] as num?)?.toInt() ??
+          _parseGeneratedAtMs(payload['generatedAt'] as String?),
+      providerInfo: payload['providerInfo'] != null
           ? RaceEngineerProviderInfo.fromJson(
-              json['providerInfo'] as Map<String, dynamic>)
+              payload['providerInfo'] as Map<String, dynamic>,
+            )
           : null,
     );
   }
@@ -504,18 +500,27 @@ class EngineerEvent {
   });
 
   factory EngineerEvent.fromJson(Map<String, dynamic> json) {
-    final sourceObj = json['source'] as Map<String, dynamic>;
+    final payload = _responsePayload(json);
+    final sourceObj = payload['source'] as Map<String, dynamic>;
     return EngineerEvent(
-      eventId: json['eventId'] as String,
-      sessionId: json['sessionId'] as String,
-      version: json['version'] as String,
-      type: json['type'] as String,
-      severity: json['severity'] as String,
-      confidence: (json['confidence'] as num).toDouble(),
-      timestampUnixMs: (json['timestampUnixMs'] as num).toInt(),
-      lapNumber: (json['lapNumber'] as num).toInt(),
-      corner: json['corner'] as Map<String, dynamic>?,
+      eventId: payload['eventId'] as String,
+      sessionId: payload['sessionId'] as String,
+      version: payload['version'] as String,
+      type: payload['type'] as String,
+      severity: payload['severity'] as String,
+      confidence: (payload['confidence'] as num).toDouble(),
+      timestampUnixMs: (payload['timestampUnixMs'] as num).toInt(),
+      lapNumber: (payload['lapNumber'] as num).toInt(),
+      corner: payload['corner'] as Map<String, dynamic>?,
       source: '${sourceObj['kind']}:${sourceObj['ruleId']}',
     );
+  }
+
+  static List<EngineerEvent> listFromResponseJson(Map<String, dynamic> json) {
+    final payload = _responsePayload(json);
+    final events =
+        (payload['events'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ??
+        [];
+    return events.map(EngineerEvent.fromJson).toList();
   }
 }
