@@ -7,11 +7,13 @@ import '../../../../config/theme/app_colors.dart';
 import '../../../../config/theme/app_typography.dart';
 import '../../../../core/backend/telemetry_frame_dto.dart';
 import '../../../../core/backend/v2_bridge_providers.dart';
+import '../providers/manual_track_selection_provider.dart';
 import '../../engineer/screens/engineer_sessions_screen.dart';
 import '../../settings/screens/settings_screen.dart';
 import '../providers/session_provider.dart';
 import '../providers/telemetry_provider.dart';
 import 'v2_sync_badge.dart';
+import 'manual_track_selection_sheet.dart';
 
 /// Top header bar with logo, live indicator, lap info, and status.
 class HeaderBar extends ConsumerStatefulWidget {
@@ -65,6 +67,7 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
     final position = ref.watch(currentPositionProvider);
     final sessionState = ref.watch(sessionRecorderProvider);
     final isConnected = data != null;
+    final manualTrackSelection = ref.watch(manualTrackSelectionProvider);
 
     final trackDetection = ref.watch(backendTrackDetectionProvider);
     final trackResponse = trackDetection.valueOrNull;
@@ -197,6 +200,15 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
 
           const SizedBox(width: 12),
 
+          _ManualTrackSelectionButton(state: manualTrackSelection),
+
+          const SizedBox(width: 12),
+
+          if (manualTrackSelection.appliedSelectionLabel != null) ...[
+            ManualTrackSelectionBadge(state: manualTrackSelection),
+            const SizedBox(width: 12),
+          ],
+
           Expanded(
             child: Text(
               circuitDisplayText(trackResponse, sessionState.isRecording),
@@ -288,6 +300,45 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
 
   Future<void> _stopRecording() async {
     await ref.read(sessionRecorderProvider.notifier).stopRecording();
+  }
+}
+
+class _ManualTrackSelectionButton extends StatelessWidget {
+  final ManualTrackSelectionState state;
+
+  const _ManualTrackSelectionButton({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = state.canWrite;
+    return TextButton.icon(
+      onPressed: enabled
+          ? () {
+              showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                useSafeArea: true,
+                builder: (_) => const ManualTrackSelectionSheet(),
+              );
+            }
+          : null,
+      style: TextButton.styleFrom(
+        foregroundColor: enabled ? AppColors.neonCyan : AppColors.textDim,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      icon: const Icon(Icons.alt_route_rounded, size: 16),
+      label: Text(
+        'MANUAL',
+        style: AppTypography.inter(
+          size: 10,
+          weight: FontWeight.w700,
+          letterSpacing: 0.8,
+          color: enabled ? AppColors.neonCyan : AppColors.textDim,
+        ),
+      ),
+    );
   }
 }
 

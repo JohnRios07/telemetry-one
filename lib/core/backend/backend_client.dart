@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import 'backend_config.dart';
 import 'settings_bootstrap_dto.dart';
+import 'track_layout_dto.dart';
 import 'telemetry_frame_dto.dart';
 
 class BackendClient {
@@ -134,6 +135,142 @@ class BackendClient {
         error: BackendError(
           code: 'network_error',
           message: 'Connection failed: ${e.message}',
+        ),
+      );
+    }
+  }
+
+  Future<TrackLayoutsCatalogResponse> getTrackLayouts() async {
+    final uri = Uri.parse('${config.apiBase}/catalog/track-layouts');
+
+    try {
+      final request = await _client.getUrl(uri);
+      final response = await request.close();
+      final body = await utf8.decodeStream(response);
+
+      if (response.statusCode == 200) {
+        try {
+          return TrackLayoutsCatalogResponse.fromJson(
+            jsonDecode(body) as Map<String, dynamic>,
+          );
+        } on TrackLayoutContractException catch (e) {
+          throw BackendRequestException(
+            statusCode: response.statusCode,
+            error: BackendError(
+              code: 'parse_error',
+              message: 'Invalid track-layout catalog payload: ${e.message}',
+            ),
+          );
+        } on FormatException catch (e) {
+          throw BackendRequestException(
+            statusCode: response.statusCode,
+            error: BackendError(
+              code: 'parse_error',
+              message: 'Invalid track-layout catalog payload: ${e.message}',
+            ),
+          );
+        } on TypeError catch (e) {
+          throw BackendRequestException(
+            statusCode: response.statusCode,
+            error: BackendError(
+              code: 'parse_error',
+              message: 'Invalid track-layout catalog payload: $e',
+            ),
+          );
+        }
+      }
+
+      throw BackendRequestException(
+        statusCode: response.statusCode,
+        error: BackendError.parse(body),
+      );
+    } on SocketException catch (e) {
+      throw BackendRequestException(
+        statusCode: 0,
+        error: BackendError(
+          code: 'network_error',
+          message: 'Connection failed: ${e.message}',
+        ),
+      );
+    } on HttpException catch (e) {
+      throw BackendRequestException(
+        statusCode: 0,
+        error: BackendError(
+          code: 'http_error',
+          message: 'HTTP error: ${e.message}',
+        ),
+      );
+    }
+  }
+
+  Future<UpdateSessionTrackLayoutResponse> updateSessionTrackLayout(
+    String sessionId,
+    String trackId,
+    String layoutId,
+  ) async {
+    final body = jsonEncode(
+      UpdateSessionTrackLayoutRequest(trackId: trackId, layoutId: layoutId)
+          .toJson(),
+    );
+    final uri = Uri.parse('${config.apiBase}/sessions/$sessionId/track-layout');
+
+    try {
+      final request = await _client.putUrl(uri);
+      request.headers.contentType = ContentType.json;
+      request.write(body);
+      final response = await request.close();
+      final responseBody = await utf8.decodeStream(response);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        try {
+          return UpdateSessionTrackLayoutResponse.fromJson(
+            jsonDecode(responseBody) as Map<String, dynamic>,
+          );
+        } on TrackLayoutContractException catch (e) {
+          throw BackendRequestException(
+            statusCode: response.statusCode,
+            error: BackendError(
+              code: 'parse_error',
+              message: 'Invalid track-layout update payload: ${e.message}',
+            ),
+          );
+        } on FormatException catch (e) {
+          throw BackendRequestException(
+            statusCode: response.statusCode,
+            error: BackendError(
+              code: 'parse_error',
+              message: 'Invalid track-layout update payload: ${e.message}',
+            ),
+          );
+        } on TypeError catch (e) {
+          throw BackendRequestException(
+            statusCode: response.statusCode,
+            error: BackendError(
+              code: 'parse_error',
+              message: 'Invalid track-layout update payload: $e',
+            ),
+          );
+        }
+      }
+
+      throw BackendRequestException(
+        statusCode: response.statusCode,
+        error: BackendError.parse(responseBody),
+      );
+    } on SocketException catch (e) {
+      throw BackendRequestException(
+        statusCode: 0,
+        error: BackendError(
+          code: 'network_error',
+          message: 'Connection failed: ${e.message}',
+        ),
+      );
+    } on HttpException catch (e) {
+      throw BackendRequestException(
+        statusCode: 0,
+        error: BackendError(
+          code: 'http_error',
+          message: 'HTTP error: ${e.message}',
         ),
       );
     }

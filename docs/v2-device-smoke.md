@@ -156,7 +156,16 @@ With the V2 command from Step 2 running:
 3. Expected: no persisted settings controls, provider keys, prompts, or raw telemetry are shown.
 4. If the backend is offline or returns an invalid bootstrap version, expected: a retryable error state.
 
-## Step 10 — Rollback test (backend failure)
+## Step 10 — Manual track/layout selection smoke
+
+1. Start a live dashboard session with an aligned backend-owned session (`session_*` in the V2 sync badge).
+2. Tap the `MANUAL` control in the HeaderBar.
+3. Expected: a live-dashboard-only picker opens, loads the backend catalog on demand, and lets you pick a track first, then a layout.
+4. Expected: confirm stays disabled on local-only sessions and no fallback catalog appears.
+5. After applying a valid pair, expected: the HeaderBar shows the manual override badge while the detection text remains visible.
+6. Do not expect this control in SettingsScreen or historical views.
+
+## Step 11 — Rollback test (backend failure)
 
 Simulate a backend failure by stopping the backend or providing an unreachable URL:
 

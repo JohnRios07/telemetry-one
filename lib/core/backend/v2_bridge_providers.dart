@@ -4,6 +4,7 @@ import 'backend_config.dart';
 import 'backend_data_bridge.dart';
 import 'backend_sync_provider.dart';
 import 'telemetry_frame_dto.dart';
+import '../../features/dashboard/providers/manual_track_selection_provider.dart';
 
 /// Provider for the backend data bridge.
 final backendDataBridgeProvider = Provider<BackendDataBridge>((ref) {
@@ -33,6 +34,20 @@ final backendTrackDetectionProvider =
   final syncState = ref.watch(backendSyncProvider);
   return bridge.getTrackDetection(syncState.sessionId);
 });
+
+/// Effective backend session ID for live dashboard features.
+final backendEffectiveSessionIdProvider = Provider<String>((ref) {
+  return ref.watch(backendSyncProvider.select((state) => state.effectiveSessionId));
+});
+
+/// Whether manual track/layout selection can write to a backend-owned session.
+final manualTrackSelectionAvailabilityProvider = Provider<bool>((ref) {
+  final syncState = ref.watch(backendSyncProvider);
+  return ref.watch(backendV2EnabledProvider) && syncState.backendSessionId != null;
+});
+
+/// Session-bound manual track/layout controller for the live dashboard.
+final liveManualTrackSelectionProvider = manualTrackSelectionProvider;
 
 /// Engineer events sourced from backend V2 for a given session.
 ///
