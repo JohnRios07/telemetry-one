@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:telemetry_one/core/backend/backend_client.dart';
 import 'package:telemetry_one/core/backend/backend_config.dart';
 import 'package:telemetry_one/core/backend/backend_sync_provider.dart';
 import 'package:telemetry_one/core/backend/telemetry_frame_dto.dart';
 import 'package:telemetry_one/core/backend/settings_bootstrap_dto.dart';
+import 'package:telemetry_one/core/network/connection_manager.dart';
 import 'package:telemetry_one/features/settings/screens/settings_screen.dart';
 
 class _FakeSettingsClient extends BackendClient {
@@ -93,4 +95,32 @@ void main() {
     expect(find.text('Could not load settings bootstrap.'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
   });
+
+  testWidgets(
+    'resetting PS5 IP clears saved value and opens connection screen',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'ps5_ip_address': '192.168.1.55',
+      });
+
+      final client = _FakeSettingsClient();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [backendClientProvider.overrideWithValue(client)],
+          child: const MaterialApp(home: SettingsScreen()),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.tap(find.text('Change PS5 IP'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('PS5 IP ADDRESS'), findsOneWidget);
+      expect(await ConnectionManager.loadSavedIp(), isNull);
+    },
+  );
 }

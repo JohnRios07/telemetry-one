@@ -8,7 +8,8 @@ import 'package:telemetry_one/features/dashboard/widgets/v2_sync_badge.dart';
 
 /// Mock notifier that holds a fixed state for testing display.
 class _MockSyncNotifier extends BackendSyncNotifier {
-  _MockSyncNotifier(BackendSyncState state) : super(config: const BackendConfig()) {
+  _MockSyncNotifier(BackendSyncState state)
+    : super(config: const BackendConfig()) {
     this.state = state;
   }
 
@@ -64,16 +65,13 @@ void main() {
   });
 
   group('V2SyncBadge visibility', () {
-    testWidgets('hidden when useV2Data is false (default)',
-        (tester) async {
+    testWidgets('hidden when useV2Data is false (default)', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             backendConfigProvider.overrideWithValue(const BackendConfig()),
           ],
-          child: const MaterialApp(
-            home: Scaffold(body: V2SyncBadge()),
-          ),
+          child: const MaterialApp(home: Scaffold(body: V2SyncBadge())),
         ),
       );
 
@@ -93,13 +91,11 @@ void main() {
             backendConfigProvider.overrideWithValue(
               const BackendConfig(useV2Data: true),
             ),
-            backendSyncProvider.overrideWith(
+          backendSyncProvider.overrideWith(
               (ref) => _MockSyncNotifier(defaultState),
             ),
           ],
-          child: const MaterialApp(
-            home: Scaffold(body: V2SyncBadge()),
-          ),
+          child: const MaterialApp(home: Scaffold(body: V2SyncBadge())),
         ),
       );
 
@@ -124,13 +120,11 @@ void main() {
             backendConfigProvider.overrideWithValue(
               const BackendConfig(useV2Data: true),
             ),
-            backendSyncProvider.overrideWith(
+          backendSyncProvider.overrideWith(
               (ref) => _MockSyncNotifier(syncState),
             ),
           ],
-          child: const MaterialApp(
-            home: Scaffold(body: V2SyncBadge()),
-          ),
+          child: const MaterialApp(home: Scaffold(body: V2SyncBadge())),
         ),
       );
 
@@ -168,8 +162,7 @@ void main() {
       expect(find.text('SYNC'), findsOneWidget);
     });
 
-    testWidgets('shows rejection code when rejected frames exist',
-        (tester) async {
+    testWidgets('shows rejection code when rejected frames exist', (tester) async {
       final syncState = BackendSyncState(
         sessionId: 'local_test',
         status: SyncStatus.idle,
@@ -185,13 +178,11 @@ void main() {
             backendConfigProvider.overrideWithValue(
               const BackendConfig(useV2Data: true),
             ),
-            backendSyncProvider.overrideWith(
+          backendSyncProvider.overrideWith(
               (ref) => _MockSyncNotifier(syncState),
             ),
           ],
-          child: const MaterialApp(
-            home: Scaffold(body: V2SyncBadge()),
-          ),
+          child: const MaterialApp(home: Scaffold(body: V2SyncBadge())),
         ),
       );
 
@@ -236,8 +227,7 @@ void main() {
       );
     });
 
-    testWidgets('hides counters and session ID when disabled',
-        (tester) async {
+    testWidgets('hides counters and session ID when disabled', (tester) async {
       final disabledState = BackendSyncState(
         sessionId: 'local_test',
         status: SyncStatus.disabled,
@@ -249,13 +239,11 @@ void main() {
             backendConfigProvider.overrideWithValue(
               const BackendConfig(useV2Data: true),
             ),
-            backendSyncProvider.overrideWith(
+          backendSyncProvider.overrideWith(
               (ref) => _MockSyncNotifier(disabledState),
             ),
           ],
-          child: const MaterialApp(
-            home: Scaffold(body: V2SyncBadge()),
-          ),
+          child: const MaterialApp(home: Scaffold(body: V2SyncBadge())),
         ),
       );
 
@@ -264,5 +252,53 @@ void main() {
       expect(find.textContaining('P:'), findsNothing);
       expect(find.textContaining('S:'), findsNothing);
     });
+
+    testWidgets('power button toggles sync state from a larger tap target', (
+      tester,
+    ) async {
+      final syncNotifier = _CapturingSyncNotifier(
+        const BackendSyncState(
+          sessionId: 'local_test',
+          status: SyncStatus.disabled,
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            backendConfigProvider.overrideWithValue(
+              const BackendConfig(useV2Data: true),
+            ),
+            backendSyncProvider.overrideWith((ref) => syncNotifier),
+          ],
+          child: const MaterialApp(home: Scaffold(body: V2SyncBadge())),
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.power_settings_new_rounded));
+      await tester.pump();
+
+      expect(syncNotifier.calls, [true]);
+    });
   });
+}
+
+class _CapturingSyncNotifier extends BackendSyncNotifier {
+  final List<bool> calls = [];
+
+  _CapturingSyncNotifier(BackendSyncState state)
+    : super(config: const BackendConfig()) {
+    this.state = state;
+  }
+
+  @override
+  Future<void> setEnabled(bool enabled) async {
+    calls.add(enabled);
+    state = state.copyWith(
+      status: enabled ? SyncStatus.idle : SyncStatus.disabled,
+    );
+  }
+
+  @override
+  void dispose() {}
 }

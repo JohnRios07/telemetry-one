@@ -155,6 +155,13 @@ With the V2 command from Step 2 running:
 2. Expected: a read-only settings screen opens with `CLIENT HINTS`, `LIMITS`, and `CAPABILITIES` sections.
 3. Expected: no persisted settings controls, provider keys, prompts, or raw telemetry are shown.
 4. If the backend is offline or returns an invalid bootstrap version, expected: a retryable error state.
+5. Use the `Change PS5 IP` action to clear the saved IP and return to the connection screen when the console changes networks.
+
+## Step 9b — Startup fallback smoke
+
+1. Save a bad PS5 IP, then restart the app.
+2. Expected: startup attempts auto-connect once, then falls back to the connection screen instead of trapping the dashboard.
+3. Expected: the saved IP can still be edited from the connection screen.
 
 ## Step 10 — Manual track/layout selection smoke
 
@@ -165,14 +172,7 @@ With the V2 command from Step 2 running:
 5. After applying a valid pair, expected: the HeaderBar shows the manual override badge while the detection text remains visible.
 6. Do not expect this control in SettingsScreen or historical views.
 
-## Step 11 — Track capabilities panel smoke
-
-1. With V2 data enabled and the backend returning `DetectionResult.capabilities` or `session.trackCapabilities`, confirm the dashboard shows a compact `TRACK CAPABILITIES` panel in the bottom-right area near `RACE ENGINEER`.
-2. Expected: `available`, `partial`, and `unavailable` states are shown explicitly in the panel, with any backend reason text rendered below the state chip.
-3. After applying a manual track/layout selection that returns `session.trackCapabilities`, expected: the panel reflects the manual response instead of stale detection data.
-4. If the backend omits capability payloads, expected: the panel stays hidden/empty rather than inventing a state.
-
-## Step 12 — Rollback test (backend failure)
+## Step 11 — Rollback test (backend failure)
 
 Simulate a backend failure by stopping the backend or providing an unreachable URL:
 

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+
 import 'config/theme/app_theme.dart';
 import 'core/network/connection_manager.dart';
+import 'core/network/udp_service.dart';
 import 'features/dashboard/providers/telemetry_provider.dart';
 import 'features/dashboard/screens/dashboard_screen.dart';
 import 'connection/screens/connection_screen.dart';
@@ -11,7 +13,8 @@ import 'connection/screens/connection_screen.dart';
 ///
 /// Determines the initial route based on saved PS5 IP:
 /// - No saved IP → [ConnectionScreen]
-/// - Saved IP → [DashboardScreen] (auto-connect)
+/// - Saved IP → [DashboardScreen] when auto-connect reaches listening state,
+///   otherwise [ConnectionScreen]
 class TelemetryOneApp extends ConsumerStatefulWidget {
   const TelemetryOneApp({super.key});
 
@@ -32,23 +35,27 @@ class _TelemetryOneAppState extends ConsumerState<TelemetryOneApp> {
   Future<void> _checkSavedIp() async {
     final savedIp = await ConnectionManager.loadSavedIp();
     if (mounted) {
+      Widget initialScreen = const ConnectionScreen();
+
       if (savedIp != null) {
-        // Auto-connect with saved IP
+        final udpService = ref.read(udpServiceProvider);
         try {
-          final udpService = ref.read(udpServiceProvider);
           await udpService.start(savedIp);
         } catch (_) {
-          // If auto-connect fails, show connection screen
+          // Keep the connection screen if auto-connect fails for any reason.
         }
+
+        initialScreen = udpService.currentState == UdpConnectionState.listening
+            ? const DashboardScreen()
+            : const ConnectionScreen();
       }
-      if (mounted) {
-        setState(() {
-          _checking = false;
-          _initialScreen = savedIp != null
-              ? const DashboardScreen()
-              : const ConnectionScreen();
-        });
-      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _checking = false;
+        _initialScreen = initialScreen;
+      });
     }
   }
 
