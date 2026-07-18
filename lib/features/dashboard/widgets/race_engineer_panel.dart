@@ -6,7 +6,9 @@ import '../../../../config/theme/app_typography.dart';
 import '../providers/race_engineer_advice_provider.dart';
 
 class RaceEngineerPanel extends ConsumerWidget {
-  const RaceEngineerPanel({super.key});
+  final bool compact;
+
+  const RaceEngineerPanel({super.key, this.compact = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -21,7 +23,7 @@ class RaceEngineerPanel extends ConsumerWidget {
         : null;
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(compact ? 8 : 12),
       decoration: BoxDecoration(
         color: AppColors.graphite,
         border: Border.all(color: AppColors.darkSurface, width: 0.75),
@@ -36,10 +38,10 @@ class RaceEngineerPanel extends ConsumerWidget {
                 child: Text(
                   'RACE ENGINEER',
                   style: AppTypography.inter(
-                    size: 11,
+                    size: compact ? 10 : 11,
                     color: AppColors.neonCyan,
                     weight: FontWeight.w700,
-                    letterSpacing: 1.5,
+                    letterSpacing: compact ? 1.1 : 1.5,
                   ),
                 ),
               ),
@@ -53,18 +55,18 @@ class RaceEngineerPanel extends ConsumerWidget {
             ],
           ),
           if (cooldownMessage != null || availability.message != null) ...[
-            const SizedBox(height: 6),
+            SizedBox(height: compact ? 4 : 6),
             Text(
               cooldownMessage ?? availability.message!,
               style: AppTypography.inter(
-                size: 10,
+                size: compact ? 9 : 10,
                 height: 1.25,
                 color: AppColors.textDim,
               ),
             ),
           ],
-          const SizedBox(height: 10),
-          Expanded(child: _PanelBody(state: state)),
+          SizedBox(height: compact ? 8 : 10),
+          Expanded(child: _PanelBody(state: state, compact: compact)),
         ],
       ),
     );
@@ -119,13 +121,15 @@ class _ActionButton extends StatelessWidget {
 
 class _PanelBody extends StatelessWidget {
   final RaceEngineerAdviceState state;
+  final bool compact;
 
-  const _PanelBody({required this.state});
+  const _PanelBody({required this.state, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
     return switch (state.status) {
-      RaceEngineerAdviceStatus.idle => const _MessageBody(
+      RaceEngineerAdviceStatus.idle => _MessageBody(
+        compact: compact,
         title: 'Idle',
         message: 'Ask for a concise read on recent deterministic events.',
         color: AppColors.textSecondary,
@@ -142,6 +146,7 @@ class _PanelBody extends StatelessWidget {
       ),
       RaceEngineerAdviceStatus.success => _AdviceBody(state: state),
       RaceEngineerAdviceStatus.noEvents => _MessageBody(
+        compact: compact,
         title: 'No events',
         message:
             state.message ??
@@ -150,6 +155,7 @@ class _PanelBody extends StatelessWidget {
       ),
       RaceEngineerAdviceStatus.rateLimited => _RateLimitedBody(state: state),
       RaceEngineerAdviceStatus.error => _MessageBody(
+        compact: compact,
         title: 'Unavailable',
         message: state.message ?? 'Race Engineer request failed.',
         color: AppColors.error,
@@ -197,7 +203,7 @@ class _RateLimitedBody extends StatelessWidget {
           child: Text(
             warning,
             style: AppTypography.inter(
-              size: 10,
+              size: 9,
               height: 1.3,
               color: AppColors.warning,
             ),
@@ -210,7 +216,7 @@ class _RateLimitedBody extends StatelessWidget {
               child: Text(
                 state.message!,
                 style: AppTypography.inter(
-                  size: 12,
+                  size: 11,
                   height: 1.35,
                   color: AppColors.textPrimary,
                 ),
@@ -223,7 +229,7 @@ class _RateLimitedBody extends StatelessWidget {
             padding: const EdgeInsets.only(top: 6),
             child: Text(
               '${referencedEvents.length} events referenced',
-              style: AppTypography.inter(size: 9, color: AppColors.textDim),
+              style: AppTypography.inter(size: 8, color: AppColors.textDim),
             ),
           ),
       ],
@@ -247,7 +253,7 @@ class _AdviceBody extends StatelessWidget {
             child: Text(
               state.message ?? 'No advice text returned.',
               style: AppTypography.inter(
-                size: 12,
+                size: 11,
                 height: 1.35,
                 color: AppColors.textPrimary,
               ),
@@ -258,7 +264,7 @@ class _AdviceBody extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             '${response.referencedEvents.length} events referenced',
-            style: AppTypography.inter(size: 9, color: AppColors.textDim),
+            style: AppTypography.inter(size: 8, color: AppColors.textDim),
           ),
         ],
       ],
@@ -270,11 +276,13 @@ class _MessageBody extends StatelessWidget {
   final String title;
   final String message;
   final Color color;
+  final bool compact;
 
   const _MessageBody({
     required this.title,
     required this.message,
     required this.color,
+    this.compact = false,
   });
 
   @override
@@ -286,19 +294,19 @@ class _MessageBody extends StatelessWidget {
         Text(
           title.toUpperCase(),
           style: AppTypography.inter(
-            size: 10,
+            size: compact ? 9 : 10,
             weight: FontWeight.w700,
-            letterSpacing: 1.2,
+            letterSpacing: compact ? 1.0 : 1.2,
             color: color,
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: compact ? 4 : 6),
         Text(
           message,
-          maxLines: 3,
+          maxLines: compact ? 2 : 3,
           overflow: TextOverflow.ellipsis,
           style: AppTypography.inter(
-            size: 11,
+            size: compact ? 10 : 11,
             height: 1.35,
             color: AppColors.textSecondary,
           ),

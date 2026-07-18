@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'track_capabilities_dto.dart';
+
 Map<String, dynamic> _responsePayload(Map<String, dynamic> json) {
   final data = json['data'];
   if (data is Map<String, dynamic>) {
@@ -165,6 +167,7 @@ class UpdateSessionTrackLayoutResponse {
   final String layoutId;
   final String? detectedTrackId;
   final String? detectedLayoutId;
+  final TrackCapabilitiesDto? capabilities;
 
   const UpdateSessionTrackLayoutResponse({
     required this.sessionId,
@@ -172,6 +175,7 @@ class UpdateSessionTrackLayoutResponse {
     required this.layoutId,
     this.detectedTrackId,
     this.detectedLayoutId,
+    this.capabilities,
   });
 
   factory UpdateSessionTrackLayoutResponse.fromJson(Map<String, dynamic> json) {
@@ -182,6 +186,9 @@ class UpdateSessionTrackLayoutResponse {
       layoutId: _requiredString(payload, 'layoutId'),
       detectedTrackId: _optionalString(payload, 'detectedTrackId'),
       detectedLayoutId: _optionalString(payload, 'detectedLayoutId'),
+      capabilities: parseTrackCapabilities(
+        payload['trackCapabilities'] ?? payload['capabilities'],
+      ),
     );
   }
 }

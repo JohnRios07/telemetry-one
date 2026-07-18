@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'track_capabilities_dto.dart';
+
 Map<String, dynamic> _responsePayload(Map<String, dynamic> json) {
   final data = json['data'];
   if (data is Map<String, dynamic>) {
@@ -254,6 +256,7 @@ class TrackDetectionResponse {
   final double confidence;
   final List<String> reasons;
   final String? nextAction;
+  final TrackCapabilitiesDto? capabilities;
 
   const TrackDetectionResponse({
     required this.status,
@@ -264,6 +267,7 @@ class TrackDetectionResponse {
     this.confidence = 0,
     this.reasons = const [],
     this.nextAction,
+    this.capabilities,
   });
 
   bool get isDetected => status == 'detected';
@@ -281,6 +285,9 @@ class TrackDetectionResponse {
       confidence: (payload['confidence'] as num?)?.toDouble() ?? 0,
       reasons: (payload['reasons'] as List<dynamic>?)?.cast<String>() ?? [],
       nextAction: payload['nextAction'] as String?,
+      capabilities: parseTrackCapabilities(
+        payload['capabilities'] ?? payload['trackCapabilities'],
+      ),
     );
   }
 }
