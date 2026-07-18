@@ -71,9 +71,9 @@ void main() {
 
     expect(find.text('CLIENT HINTS'), findsOneWidget);
     expect(find.text('LIMITS'), findsOneWidget);
-    expect(find.text('CAPABILITIES'), findsOneWidget);
     expect(find.textContaining('alias'), findsOneWidget);
-    expect(find.textContaining('readOnly'), findsOneWidget);
+    expect(find.text('CAPABILITIES'), findsNothing);
+    expect(find.textContaining('readOnly'), findsNothing);
   });
 
   testWidgets('shows error state and retry action', (tester) async {

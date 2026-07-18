@@ -117,7 +117,7 @@ void main() {
   });
 
   group('Dashboard placement', () {
-    testWidgets('shows capabilities panel in the bottom row, not the header', (
+    testWidgets('does not show capabilities panel in the standard dashboard', (
       tester,
     ) async {
       _useWideScreen(tester);
@@ -134,9 +134,9 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.text('TRACK CAPABILITIES'), findsOneWidget);
       expect(find.text('RACE ENGINEER'), findsOneWidget);
-      expect(find.text('Layout capabilities are fully available.'), findsOneWidget);
+      expect(find.text('TRACK CAPABILITIES'), findsNothing);
+      expect(find.text('Layout capabilities are fully available.'), findsNothing);
       expect(find.descendant(
         of: find.byType(HeaderBar),
         matching: find.text('TRACK CAPABILITIES'),

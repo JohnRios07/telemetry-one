@@ -70,11 +70,6 @@ class SettingsScreen extends ConsumerWidget {
                 title: 'Limits',
                 section: response.bootstrap.limits,
               ),
-              const SizedBox(height: 12),
-              _BootstrapSectionCard(
-                title: 'Capabilities',
-                section: response.bootstrap.capabilities,
-              ),
             ],
           ),
         ),
