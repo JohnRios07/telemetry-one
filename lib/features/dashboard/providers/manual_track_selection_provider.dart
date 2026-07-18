@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/backend/backend_client.dart';
 import '../../../core/backend/backend_sync_provider.dart';
+import '../../../core/backend/track_capabilities_dto.dart';
 import '../../../core/backend/track_layout_dto.dart';
 
 enum ManualTrackSelectionPhase { idle, loadingCatalog, ready, submitting, failed }
@@ -17,6 +18,7 @@ class ManualTrackSelectionState {
   final String? appliedLayoutId;
   final String? detectedTrackId;
   final String? detectedLayoutId;
+  final TrackCapabilitiesDto? appliedCapabilities;
   final String? catalogErrorMessage;
   final String? actionErrorMessage;
 
@@ -31,6 +33,7 @@ class ManualTrackSelectionState {
     this.appliedLayoutId,
     this.detectedTrackId,
     this.detectedLayoutId,
+    this.appliedCapabilities,
     this.catalogErrorMessage,
     this.actionErrorMessage,
   });
@@ -94,6 +97,7 @@ class ManualTrackSelectionState {
     Object? appliedLayoutId = _unset,
     Object? detectedTrackId = _unset,
     Object? detectedLayoutId = _unset,
+    Object? appliedCapabilities = _unset,
     Object? catalogErrorMessage = _unset,
     Object? actionErrorMessage = _unset,
   }) {
@@ -122,6 +126,9 @@ class ManualTrackSelectionState {
       detectedLayoutId: detectedLayoutId == _unset
           ? this.detectedLayoutId
           : detectedLayoutId as String?,
+      appliedCapabilities: appliedCapabilities == _unset
+          ? this.appliedCapabilities
+          : appliedCapabilities as TrackCapabilitiesDto?,
       catalogErrorMessage: catalogErrorMessage == _unset
           ? this.catalogErrorMessage
           : catalogErrorMessage as String?,
@@ -268,6 +275,7 @@ class ManualTrackSelectionNotifier extends StateNotifier<ManualTrackSelectionSta
         phase: ManualTrackSelectionPhase.ready,
         appliedTrackId: response.trackId,
         appliedLayoutId: response.layoutId,
+        appliedCapabilities: response.capabilities,
         detectedTrackId: response.detectedTrackId,
         detectedLayoutId: response.detectedLayoutId,
         selectedTrackId: response.trackId,

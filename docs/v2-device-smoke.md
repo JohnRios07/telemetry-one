@@ -165,7 +165,14 @@ With the V2 command from Step 2 running:
 5. After applying a valid pair, expected: the HeaderBar shows the manual override badge while the detection text remains visible.
 6. Do not expect this control in SettingsScreen or historical views.
 
-## Step 11 — Rollback test (backend failure)
+## Step 11 — Track capabilities panel smoke
+
+1. With V2 data enabled and the backend returning `DetectionResult.capabilities` or `session.trackCapabilities`, confirm the dashboard shows a compact `TRACK CAPABILITIES` panel in the bottom-right area near `RACE ENGINEER`.
+2. Expected: `available`, `partial`, and `unavailable` states are shown explicitly in the panel, with any backend reason text rendered below the state chip.
+3. After applying a manual track/layout selection that returns `session.trackCapabilities`, expected: the panel reflects the manual response instead of stale detection data.
+4. If the backend omits capability payloads, expected: the panel stays hidden/empty rather than inventing a state.
+
+## Step 12 — Rollback test (backend failure)
 
 Simulate a backend failure by stopping the backend or providing an unreachable URL:
 
