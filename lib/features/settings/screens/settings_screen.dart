@@ -3,7 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../config/theme/app_colors.dart';
 import '../../../config/theme/app_typography.dart';
+import '../../../connection/screens/connection_screen.dart';
 import '../../../core/backend/settings_bootstrap_dto.dart';
+import '../../../core/network/connection_manager.dart';
+import '../../../core/network/udp_service.dart';
+import '../../../features/dashboard/providers/telemetry_provider.dart';
 import '../../../shared/widgets/panel_card.dart';
 import '../providers/settings_bootstrap_provider.dart';
 
@@ -40,6 +44,23 @@ class SettingsScreen extends ConsumerWidget {
           data: (response) => ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              _ConnectionSectionCard(
+                onResetIp: () async {
+                  final udpService = ref.read(udpServiceProvider);
+                  await udpService.stop();
+                  await ConnectionManager.clearIp();
+
+                  if (!context.mounted) return;
+
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const ConnectionScreen(),
+                    ),
+                    (route) => false,
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
               _BootstrapSectionCard(
                 title: 'Client hints',
                 section: response.bootstrap.clientHints,
@@ -57,6 +78,48 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ConnectionSectionCard extends StatelessWidget {
+  final Future<void> Function() onResetIp;
+
+  const _ConnectionSectionCard({required this.onResetIp});
+
+  @override
+  Widget build(BuildContext context) {
+    return PanelCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'PS5 CONNECTION',
+            style: AppTypography.inter(
+              size: 11,
+              color: AppColors.neonCyan,
+              weight: FontWeight.w700,
+              letterSpacing: 1.4,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Forget the saved PS5 IP and return to the connection screen to enter a new one.',
+            style: AppTypography.inter(
+              size: 13,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: () => onResetIp(),
+            icon: const Icon(Icons.wifi_off_rounded),
+            label: const Text('Change PS5 IP'),
+          ),
+        ],
       ),
     );
   }
@@ -202,10 +265,7 @@ class _SettingsErrorState extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              FilledButton(
-                onPressed: onRetry,
-                child: const Text('Retry'),
-              ),
+              FilledButton(onPressed: onRetry, child: const Text('Retry')),
             ],
           ),
         ),

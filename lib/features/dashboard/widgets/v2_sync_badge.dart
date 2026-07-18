@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../../config/theme/app_colors.dart';
 import '../../../../config/theme/app_typography.dart';
 import '../../../../core/backend/backend_sync_provider.dart';
@@ -25,10 +26,7 @@ class V2SyncBadge extends ConsumerWidget {
       decoration: BoxDecoration(
         color: AppColors.darkSurface,
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: _borderColor(syncState.status),
-          width: 0.5,
-        ),
+        border: Border.all(color: _borderColor(syncState.status), width: 0.5),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -49,16 +47,37 @@ class V2SyncBadge extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              GestureDetector(
-                onTap: () =>
-                    ref.read(backendSyncProvider.notifier)
-                        .setEnabled(!syncState.enabled),
-                child: Icon(
-                  Icons.power_settings_new_rounded,
-                  size: 12,
-                  color: syncState.enabled
-                      ? AppColors.success
-                      : AppColors.textDim,
+              Material(
+                color: syncState.enabled
+                    ? AppColors.success.withValues(alpha: 0.12)
+                    : AppColors.darkSurface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999),
+                  side: BorderSide(
+                    color: syncState.enabled
+                        ? AppColors.success.withValues(alpha: 0.35)
+                        : AppColors.darkSurface,
+                    width: 0.75,
+                  ),
+                ),
+                child: InkWell(
+                  onTap: () => ref
+                      .read(backendSyncProvider.notifier)
+                      .setEnabled(!syncState.enabled),
+                  customBorder: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: SizedBox(
+                    width: 30,
+                    height: 30,
+                    child: Icon(
+                      Icons.power_settings_new_rounded,
+                      size: 16,
+                      color: syncState.enabled
+                          ? AppColors.success
+                          : AppColors.textDim,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -79,10 +98,7 @@ class V2SyncBadge extends ConsumerWidget {
               'A:${syncState.totalAccepted} '
               'R:${syncState.totalRejected}'
               '${syncState.lastRejectionCode != null ? ' ${syncState.lastRejectionCode}' : ''}',
-              style: AppTypography.inter(
-                size: 8,
-                color: AppColors.textDim,
-              ),
+              style: AppTypography.inter(size: 8, color: AppColors.textDim),
             ),
           ],
         ],
