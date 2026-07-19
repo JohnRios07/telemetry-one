@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../config/theme/app_colors.dart';
 import '../../../../config/theme/app_typography.dart';
+import '../../../../core/backend/telemetry_frame_dto.dart';
 import '../providers/race_engineer_advice_provider.dart';
 
 class RaceEngineerPanel extends ConsumerWidget {
@@ -190,48 +191,62 @@ class _RateLimitedBody extends StatelessWidget {
         state.message != null && state.message!.trim().isNotEmpty;
     final referencedEvents = response?.referencedEvents ?? const <String>[];
     final hasReferencedEvents = referencedEvents.isNotEmpty;
+    final visibleSignals = response?.visibleSignals ?? const <RaceEngineerSignal>[];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppColors.warning.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            warning,
-            style: AppTypography.inter(
-              size: 9,
-              height: 1.3,
-              color: AppColors.warning,
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    warning,
+                    style: AppTypography.inter(
+                      size: 9,
+                      height: 1.3,
+                      color: AppColors.warning,
+                    ),
+                  ),
+                ),
+                if (hasFallbackMessage) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    state.message!,
+                    style: AppTypography.inter(
+                      size: 11,
+                      height: 1.35,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+                if (response != null &&
+                    (response.window?.derivedSignalCount != null ||
+                        visibleSignals.isNotEmpty)) ...[
+                  const SizedBox(height: 6),
+                  _SignalSummary(response: response),
+                ],
+                if (hasReferencedEvents) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '${referencedEvents.length} events referenced',
+                    style: AppTypography.inter(
+                      size: 8,
+                      color: AppColors.textDim,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
-        if (hasFallbackMessage) ...[
-          const SizedBox(height: 8),
-          Expanded(
-            child: SingleChildScrollView(
-              child: Text(
-                state.message!,
-                style: AppTypography.inter(
-                  size: 11,
-                  height: 1.35,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ),
-          ),
-        ],
-        if (hasReferencedEvents)
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text(
-              '${referencedEvents.length} events referenced',
-              style: AppTypography.inter(size: 8, color: AppColors.textDim),
-            ),
-          ),
       ],
     );
   }
@@ -245,29 +260,230 @@ class _AdviceBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final response = state.response;
+    final visibleSignals = response?.visibleSignals ?? const <RaceEngineerSignal>[];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
           child: SingleChildScrollView(
-            child: Text(
-              state.message ?? 'No advice text returned.',
-              style: AppTypography.inter(
-                size: 11,
-                height: 1.35,
-                color: AppColors.textPrimary,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  state.message ?? 'No advice text returned.',
+                  style: AppTypography.inter(
+                    size: 11,
+                    height: 1.35,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                if (response != null &&
+                    (visibleSignals.isNotEmpty ||
+                        response.window?.derivedSignalCount != null)) ...[
+                  const SizedBox(height: 8),
+                  _SignalSummary(response: response),
+                ],
+                if (response != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '${response.referencedEvents.length} events referenced',
+                    style: AppTypography.inter(
+                      size: 8,
+                      color: AppColors.textDim,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
-        if (response != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            '${response.referencedEvents.length} events referenced',
-            style: AppTypography.inter(size: 8, color: AppColors.textDim),
+      ],
+    );
+  }
+}
+
+class _SignalSummary extends StatelessWidget {
+  final RaceEngineerAdviceResponse response;
+
+  const _SignalSummary({required this.response});
+
+  @override
+  Widget build(BuildContext context) {
+    final derivedSignalCount = response.window?.derivedSignalCount;
+    final signals = response.visibleSignals;
+    final signalCountLabel = derivedSignalCount != null
+        ? '$derivedSignalCount derived signals'
+        : '${signals.length} signals';
+    final visibleSignals = signals.take(3).toList(growable: false);
+    final remainingSignals = signals.length - visibleSignals.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            _MetaChip(
+              label: _humanizeStatus(response.status),
+              color: AppColors.textSecondary,
+            ),
+            if (derivedSignalCount != null)
+              _MetaChip(label: signalCountLabel, color: AppColors.neonCyan)
+            else if (signals.isNotEmpty)
+              _MetaChip(label: signalCountLabel, color: AppColors.neonCyan),
+          ],
+        ),
+        if (visibleSignals.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Column(
+            children: [
+              for (final signal in visibleSignals) ...[
+                _SignalRow(signal: signal),
+                if (signal != visibleSignals.last) const SizedBox(height: 6),
+              ],
+              if (remainingSignals > 0) ...[
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '+$remainingSignals more signals',
+                    style: AppTypography.inter(
+                      size: 8,
+                      color: AppColors.textDim,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ],
+    );
+  }
+}
+
+class _MetaChip extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _MetaChip({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.24), width: 0.75),
+      ),
+      child: Text(
+        label,
+        style: AppTypography.inter(
+          size: 8,
+          weight: FontWeight.w700,
+          letterSpacing: 0.4,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+class _SignalRow extends StatelessWidget {
+  final RaceEngineerSignal signal;
+
+  const _SignalRow({required this.signal});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _signalColor(signal.displaySeverity);
+    final detail = signal.displayMessage;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: AppColors.darkSurface.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withOpacity(0.2), width: 0.75),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                margin: const EdgeInsets.only(top: 5),
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  signal.displayLabel,
+                  style: AppTypography.inter(
+                    size: 10,
+                    weight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              if (signal.displaySeverity != null)
+                _SeverityPill(label: signal.displaySeverity!, color: color),
+            ],
+          ),
+          if (detail != null) ...[
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.only(left: 15),
+              child: Text(
+                detail,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.inter(
+                  size: 9,
+                  height: 1.3,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SeverityPill extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _SeverityPill({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label.toUpperCase(),
+        style: AppTypography.inter(
+          size: 7,
+          weight: FontWeight.w700,
+          letterSpacing: 0.5,
+          color: color,
+        ),
+      ),
     );
   }
 }
@@ -314,4 +530,24 @@ class _MessageBody extends StatelessWidget {
       ],
     );
   }
+}
+
+Color _signalColor(String? severity) {
+  final normalized = severity?.trim().toLowerCase();
+  return switch (normalized) {
+    'critical' || 'error' || 'high' => AppColors.error,
+    'warning' || 'warn' || 'medium' => AppColors.warning,
+    'info' || 'low' => AppColors.neonCyan,
+    _ => AppColors.textSecondary,
+  };
+}
+
+String _humanizeStatus(String status) {
+  final words = status.replaceAll('_', ' ').trim();
+  if (words.isEmpty) return 'Status';
+  return words
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty)
+      .map((part) => part[0].toUpperCase() + part.substring(1))
+      .join(' ');
 }

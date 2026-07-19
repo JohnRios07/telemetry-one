@@ -114,6 +114,97 @@ void main() {
       expect(find.text('1 events referenced'), findsOneWidget);
     });
 
+    testWidgets('renders success advice with derived signals summary', (
+      tester,
+    ) async {
+      await _pumpPanel(
+        tester,
+        const RaceEngineerAdviceState(
+          status: RaceEngineerAdviceStatus.success,
+          response: RaceEngineerAdviceResponse(
+            sessionId: 'session_test_1',
+            status: 'success',
+            message: 'Brake earlier into turn 1.',
+            signals: [
+              RaceEngineerSignal(
+                type: 'lap_pace_regression',
+                severity: 'warning',
+                message: 'Lap 4 is 1.2s slower than the best lap.',
+              ),
+              RaceEngineerSignal(
+                type: 'telemetry_gap_warning',
+                severity: 'info',
+                title: 'Telemetry gap warning',
+                summary: 'Missing telemetry in sector 2.',
+              ),
+            ],
+            window: RaceEngineerAdviceWindow(derivedSignalCount: 2),
+          ),
+          message: 'Brake earlier into turn 1.',
+        ),
+      );
+
+      expect(find.text('Success'), findsOneWidget);
+      expect(find.text('2 derived signals'), findsOneWidget);
+      expect(find.text('Lap Pace Regression'), findsOneWidget);
+      expect(find.text('Telemetry gap warning'), findsOneWidget);
+      expect(find.text('WARNING'), findsOneWidget);
+      expect(find.text('Missing telemetry in sector 2.'), findsOneWidget);
+    });
+
+    testWidgets('filters internal diagnostic signals from normal UI', (
+      tester,
+    ) async {
+      await _pumpPanel(
+        tester,
+        const RaceEngineerAdviceState(
+          status: RaceEngineerAdviceStatus.success,
+          response: RaceEngineerAdviceResponse(
+            sessionId: 'session_test_1',
+            status: 'success',
+            message: 'Brake earlier into turn 1.',
+            signals: [
+              RaceEngineerSignal(
+                type: 'trackbuilder_chord_excess',
+                label: 'Trackbuilder chord excess',
+                message: 'Internal diagnostic payload.',
+              ),
+              RaceEngineerSignal(
+                type: 'telemetry_baseline_only',
+                title: 'Telemetry baseline only',
+                summary: 'Internal baseline diagnostic.',
+              ),
+              RaceEngineerSignal(
+                type: 'geometry_status',
+                title: 'Geometry status',
+                summary: 'Internal geometry diagnostic.',
+              ),
+              RaceEngineerSignal(
+                type: 'baseline_delta',
+                message: 'Internal baseline delta diagnostic.',
+              ),
+              RaceEngineerSignal(
+                type: 'lap_pace_regression',
+                severity: 'warning',
+                message: 'Lap pace is regressing.',
+              ),
+            ],
+          ),
+          message: 'Brake earlier into turn 1.',
+        ),
+      );
+
+      expect(find.text('Lap Pace Regression'), findsOneWidget);
+      expect(find.text('Lap pace is regressing.'), findsOneWidget);
+      expect(find.text('Trackbuilder chord excess'), findsNothing);
+      expect(find.text('Internal diagnostic payload.'), findsNothing);
+      expect(find.text('Telemetry baseline only'), findsNothing);
+      expect(find.text('Internal baseline diagnostic.'), findsNothing);
+      expect(find.text('Geometry status'), findsNothing);
+      expect(find.text('Internal geometry diagnostic.'), findsNothing);
+      expect(find.text('Baseline delta diagnostic.'), findsNothing);
+    });
+
     testWidgets('renders no_events state', (tester) async {
       await _pumpPanel(
         tester,
