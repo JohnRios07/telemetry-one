@@ -183,6 +183,67 @@ void main() {
       expect(response.signals.last.displayMessage, 'Missing telemetry in sector 2.');
     });
 
+    test('filters internal diagnostic signal types from visibleSignals', () {
+      final response = RaceEngineerAdviceResponse.fromJson({
+        'sessionId': 'session_test_1',
+        'status': 'success',
+        'signals': [
+          {
+            'type': 'trackbuilder_chord_excess',
+            'label': 'Trackbuilder chord excess',
+            'message': 'Internal diagnostic payload.',
+          },
+          {
+            'type': 'lap_pace_regression',
+            'severity': 'warning',
+            'message': 'Lap pace is regressing.',
+          },
+          {
+            'type': 'geometry_status',
+            'title': 'Geometry status',
+            'summary': 'Internal geometry check.',
+          },
+          {
+            'type': 'telemetry_baseline_only',
+            'message': 'Baseline-only diagnostic.',
+          },
+          {
+            'type': 'baseline_delta',
+            'message': 'Baseline delta diagnostic.',
+          },
+          {
+            'type': 'off_track_stint_warning',
+            'severity': 'warning',
+            'summary': 'Off track stint detected.',
+          },
+        ],
+        'window': {'derivedSignalCount': 6},
+      });
+
+      expect(response.signals, hasLength(6));
+      expect(response.visibleSignals, hasLength(2));
+      expect(response.visibleSignals.map((signal) => signal.type), [
+        'lap_pace_regression',
+        'off_track_stint_warning',
+      ]);
+      expect(response.visibleSignals.first.displayMessage, 'Lap pace is regressing.');
+      expect(response.signals.first.displayMessage, isNull);
+    });
+
+    test('degrades gracefully for malformed signals and window payloads', () {
+      final response = RaceEngineerAdviceResponse.fromJson({
+        'sessionId': 'session_test_1',
+        'status': 'success',
+        'signals': 'not-a-list',
+        'window': 'not-a-map',
+      });
+
+      expect(response.signals, isEmpty);
+      expect(response.hasSignals, isFalse);
+      expect(response.window, isNull);
+      expect(response.visibleSignals, isEmpty);
+    });
+
     test('parses success response with legacy advice field', () {
       final response = RaceEngineerAdviceResponse.fromJson({
         'sessionId': 'session_test_1',

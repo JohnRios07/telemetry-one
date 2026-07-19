@@ -191,6 +191,7 @@ class _RateLimitedBody extends StatelessWidget {
         state.message != null && state.message!.trim().isNotEmpty;
     final referencedEvents = response?.referencedEvents ?? const <String>[];
     final hasReferencedEvents = referencedEvents.isNotEmpty;
+    final visibleSignals = response?.visibleSignals ?? const <RaceEngineerSignal>[];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -228,7 +229,7 @@ class _RateLimitedBody extends StatelessWidget {
                 ],
                 if (response != null &&
                     (response.window?.derivedSignalCount != null ||
-                        response.hasSignals)) ...[
+                        visibleSignals.isNotEmpty)) ...[
                   const SizedBox(height: 6),
                   _SignalSummary(response: response),
                 ],
@@ -259,6 +260,7 @@ class _AdviceBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final response = state.response;
+    final visibleSignals = response?.visibleSignals ?? const <RaceEngineerSignal>[];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -276,7 +278,7 @@ class _AdviceBody extends StatelessWidget {
                   ),
                 ),
                 if (response != null &&
-                    (response.hasSignals ||
+                    (visibleSignals.isNotEmpty ||
                         response.window?.derivedSignalCount != null)) ...[
                   const SizedBox(height: 8),
                   _SignalSummary(response: response),
@@ -308,7 +310,7 @@ class _SignalSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final derivedSignalCount = response.window?.derivedSignalCount;
-    final signals = response.signals;
+    final signals = response.visibleSignals;
     final signalCountLabel = derivedSignalCount != null
         ? '$derivedSignalCount derived signals'
         : '${signals.length} signals';

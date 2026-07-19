@@ -393,6 +393,12 @@ class RaceEngineerAdviceWindow {
 }
 
 class RaceEngineerSignal {
+  static const Set<String> _userFacingTypes = {
+    'lap_pace_regression',
+    'telemetry_gap_warning',
+    'off_track_stint_warning',
+  };
+
   final String type;
   final String? severity;
   final String? label;
@@ -415,15 +421,20 @@ class RaceEngineerSignal {
     this.timestampUnixMs,
   });
 
-  String get displayLabel => label ?? title ?? _humanizeSignalType(type);
+  bool get isUserFacing => _userFacingTypes.contains(type.trim().toLowerCase());
+
+  String get displayLabel =>
+      isUserFacing ? (label ?? title ?? _humanizeSignalType(type)) : 'Internal signal';
 
   String? get displayMessage {
+    if (!isUserFacing) return null;
     final text = message ?? summary;
     if (text == null || text.trim().isEmpty) return null;
     return text;
   }
 
   String? get displaySeverity {
+    if (!isUserFacing) return null;
     final value = severity ?? status;
     if (value == null || value.trim().isEmpty) return null;
     return value;
@@ -508,6 +519,9 @@ class RaceEngineerAdviceResponse {
       (advice != null && advice!.trim().isNotEmpty);
   bool get hasNoEvents => status == 'no_events';
   bool get hasSignals => signals.isNotEmpty;
+  List<RaceEngineerSignal> get visibleSignals =>
+      signals.where((signal) => signal.isUserFacing).toList(growable: false);
+  bool get hasVisibleSignals => visibleSignals.isNotEmpty;
   bool get isRateLimited =>
       status == 'rate_limited' ||
       providerInfo?.finishReason == 'rate_limited' ||
@@ -524,12 +538,13 @@ class RaceEngineerAdviceResponse {
           (payload['referencedEvents'] as List<dynamic>?)?.cast<String>() ??
           (payload['referencedEventIds'] as List<dynamic>?)?.cast<String>() ??
           const [],
-      signals: (payload['signals'] as List<dynamic>?)
-          ?.whereType<Map<String, dynamic>>()
-          .map(RaceEngineerSignal.fromJson)
-          .toList(growable: false) ??
-          const [],
-      window: payload['window'] != null
+      signals: payload['signals'] is List
+          ? (payload['signals'] as List<dynamic>)
+              .whereType<Map<String, dynamic>>()
+              .map(RaceEngineerSignal.fromJson)
+              .toList(growable: false)
+          : const [],
+      window: payload['window'] is Map<String, dynamic>
           ? RaceEngineerAdviceWindow.fromJson(
               payload['window'] as Map<String, dynamic>,
             )
