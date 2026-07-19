@@ -7,7 +7,6 @@ import '../../../../core/backend/v2_bridge_providers.dart';
 import '../../../core/models/telemetry_data.dart';
 import '../../../../config/theme/app_colors.dart';
 import '../../../../config/theme/app_typography.dart';
-import '../providers/track_capabilities_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/telemetry_provider.dart';
 import '../widgets/header_bar.dart';
@@ -18,7 +17,6 @@ import '../widgets/lap_times.dart';
 import '../widgets/fuel_indicator.dart';
 import '../widgets/player_track_map.dart';
 import '../widgets/race_engineer_panel.dart';
-import '../widgets/track_capabilities_panel.dart';
 import '../widgets/tire_temps.dart';
 
 /// Landscape dashboard with strong visual hierarchy inspired by motorsport pits.
@@ -109,45 +107,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         final v2Enabled = ref.watch(backendV2EnabledProvider);
 
         return Row(
-            children: [
-              Expanded(flex: 42, child: TireTemps(compact: compact)),
+          children: [
+            Expanded(flex: 42, child: TireTemps(compact: compact)),
+            const SizedBox(width: 10),
+            if (v2Enabled) ...[
+              const Expanded(flex: 28, child: PlayerTrackMap()),
               const SizedBox(width: 10),
-              if (v2Enabled) ...[
-                const Expanded(flex: 28, child: PlayerTrackMap()),
-                const SizedBox(width: 10),
-                const Expanded(flex: 30, child: _EngineerArea()),
-              ] else
-                const Expanded(flex: 58, child: PlayerTrackMap()),
-            ],
-          );
+              const Expanded(flex: 30, child: RaceEngineerPanel(compact: true)),
+            ] else
+              const Expanded(flex: 58, child: PlayerTrackMap()),
+          ],
+        );
       },
-    );
-  }
-}
-
-class _EngineerArea extends ConsumerWidget {
-  const _EngineerArea();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final capabilities = ref.watch(effectiveTrackCapabilitiesProvider);
-
-    if (capabilities == null) {
-      return const RaceEngineerPanel();
-    }
-
-    return Column(
-      children: [
-        const Expanded(flex: 60, child: RaceEngineerPanel(compact: true)),
-        const SizedBox(height: 10),
-        Expanded(
-          flex: 42,
-          child: TrackCapabilitiesPanel(
-            capabilities: capabilities,
-            compact: true,
-          ),
-        ),
-      ],
     );
   }
 }
