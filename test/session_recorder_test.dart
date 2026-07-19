@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telemetry_one/core/models/telemetry_data.dart';
 import 'package:telemetry_one/core/recording/complete_lap_recorder.dart';
+import 'package:telemetry_one/core/storage/session_model.dart';
+import 'package:telemetry_one/core/storage/session_repository.dart';
 import 'package:telemetry_one/features/dashboard/providers/session_provider.dart';
 
 void main() {
@@ -61,11 +65,13 @@ void main() {
       int currentLap = 1,
       int currentLapTimeMs = 500,
       double speedKmh = 120,
+      int totalLaps = 0,
     }) {
       return TelemetryData(
         timestamp: DateTime(2026),
         packetId: packetId,
         currentLap: currentLap,
+        totalLaps: totalLaps,
         currentLapTime: Duration(milliseconds: currentLapTimeMs),
         speedKmh: speedKmh,
         gear: 3,
@@ -140,11 +146,13 @@ void main() {
       int packetId = 1,
       int currentLap = 1,
       int currentLapTimeMs = 500,
+      int totalLaps = 0,
     }) {
       return TelemetryData(
         timestamp: DateTime(2026),
         packetId: packetId,
         currentLap: currentLap,
+        totalLaps: totalLaps,
         currentLapTime: Duration(milliseconds: currentLapTimeMs),
         speedKmh: 120,
         gear: 3,
@@ -202,6 +210,44 @@ void main() {
       );
 
       expect(recorder.state.isRecording, true);
+    });
+
+    test('save-window rewind blocks duplicate auto-start after auto-stop', () async {
+      final repository = _BlockingSessionRepository();
+      recorder = SessionRecorder(
+        repository: repository,
+        lapRecorder: CompleteLapRecorder(),
+      );
+
+      recorder.recordPoint(
+        startPacket(packetId: 10, currentLap: 1, currentLapTimeMs: 500),
+      );
+      expect(recorder.state.isRecording, true);
+
+      recorder.recordPoint(
+        startPacket(
+          packetId: 11,
+          currentLap: 2,
+          currentLapTimeMs: 200,
+          totalLaps: 1,
+        ),
+      );
+      expect(recorder.state.status, RecordingStatus.saving);
+
+      recorder.recordPoint(
+        startPacket(packetId: 4, currentLap: 1, currentLapTimeMs: 500),
+      );
+
+      repository.completeSave();
+      await repository.saveFinished.future;
+
+      expect(recorder.state.status, RecordingStatus.idle);
+
+      recorder.recordPoint(
+        startPacket(packetId: 5, currentLap: 1, currentLapTimeMs: 500),
+      );
+
+      expect(recorder.state.isRecording, false);
     });
 
     test('manual startRecording resets auto-lifecycle', () async {
@@ -287,4 +333,25 @@ void main() {
       expect(recorder.state.status, RecordingStatus.idle);
     });
   });
+}
+
+class _BlockingSessionRepository extends SessionRepository {
+  final Completer<void> _saveGate = Completer<void>();
+  final Completer<void> saveFinished = Completer<void>();
+  int saveCalls = 0;
+
+  @override
+  Future<void> saveSession(Session session) async {
+    saveCalls += 1;
+    await _saveGate.future;
+    if (!saveFinished.isCompleted) {
+      saveFinished.complete();
+    }
+  }
+
+  void completeSave() {
+    if (!_saveGate.isCompleted) {
+      _saveGate.complete();
+    }
+  }
 }

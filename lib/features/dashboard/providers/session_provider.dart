@@ -125,9 +125,9 @@ class SessionRecorder extends StateNotifier<SessionState> {
 
   /// Called from the telemetry stream to buffer a data point.
   void recordPoint(TelemetryData data) {
-    if (_isSaving) return;
-
     _updateRewindSuppression(data);
+
+    if (_isSaving) return;
 
     // Auto-start when the first race lap is detected.
     // Fires at most once per recording cycle; after a manual stop it
@@ -276,10 +276,10 @@ class SessionRecorder extends StateNotifier<SessionState> {
       _resetTelemetryObservation();
 
       if (fromAutoStop) {
-        // Race ended naturally — reset so auto-start can work for the next one.
+        // Race ended naturally — reset auto-lifecycle, but keep rewind
+        // suppression until telemetry becomes fresh again.
         _auto.triggered = false;
         _auto.userStoppedAfterAutoStart = false;
-        _suppressAutoStartUntilFreshTelemetry = false;
       }
 
       state = const SessionState(status: RecordingStatus.idle);
