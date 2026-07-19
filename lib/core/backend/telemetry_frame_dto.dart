@@ -373,11 +373,13 @@ class RaceEngineerAdviceWindow {
   final int? sinceUnixMs;
   final int? untilUnixMs;
   final int? maxEvents;
+  final int? derivedSignalCount;
 
   const RaceEngineerAdviceWindow({
     this.sinceUnixMs,
     this.untilUnixMs,
     this.maxEvents,
+    this.derivedSignalCount,
   });
 
   factory RaceEngineerAdviceWindow.fromJson(Map<String, dynamic> json) {
@@ -385,6 +387,66 @@ class RaceEngineerAdviceWindow {
       sinceUnixMs: (json['sinceUnixMs'] as num?)?.toInt(),
       untilUnixMs: (json['untilUnixMs'] as num?)?.toInt(),
       maxEvents: (json['maxEvents'] as num?)?.toInt(),
+      derivedSignalCount: (json['derivedSignalCount'] as num?)?.toInt(),
+    );
+  }
+}
+
+class RaceEngineerSignal {
+  final String type;
+  final String? severity;
+  final String? label;
+  final String? message;
+  final String? status;
+  final String? title;
+  final String? summary;
+  final double? confidence;
+  final int? timestampUnixMs;
+
+  const RaceEngineerSignal({
+    required this.type,
+    this.severity,
+    this.label,
+    this.message,
+    this.status,
+    this.title,
+    this.summary,
+    this.confidence,
+    this.timestampUnixMs,
+  });
+
+  String get displayLabel => label ?? title ?? _humanizeSignalType(type);
+
+  String? get displayMessage {
+    final text = message ?? summary;
+    if (text == null || text.trim().isEmpty) return null;
+    return text;
+  }
+
+  String? get displaySeverity {
+    final value = severity ?? status;
+    if (value == null || value.trim().isEmpty) return null;
+    return value;
+  }
+
+  factory RaceEngineerSignal.fromJson(Map<String, dynamic> json) {
+    return RaceEngineerSignal(
+      type: (json['type'] as String?) ?? (json['signalType'] as String?) ?? 'unknown',
+      severity: json['severity'] as String?,
+      label: (json['label'] as String?) ?? (json['name'] as String?),
+      message:
+          (json['message'] as String?) ??
+          (json['description'] as String?) ??
+          (json['detail'] as String?) ??
+          (json['details'] as String?) ??
+          (json['text'] as String?),
+      status: json['status'] as String?,
+      title: json['title'] as String?,
+      summary: json['summary'] as String?,
+      confidence: (json['confidence'] as num?)?.toDouble(),
+      timestampUnixMs:
+          (json['timestampUnixMs'] as num?)?.toInt() ??
+          (json['generatedAtUnixMs'] as num?)?.toInt(),
     );
   }
 }
@@ -424,6 +486,7 @@ class RaceEngineerAdviceResponse {
   final String? message;
   final String? advice;
   final List<String> referencedEvents;
+  final List<RaceEngineerSignal> signals;
   final RaceEngineerAdviceWindow? window;
   final int? generatedAtUnixMs;
   final RaceEngineerProviderInfo? providerInfo;
@@ -434,6 +497,7 @@ class RaceEngineerAdviceResponse {
     this.message,
     this.advice,
     this.referencedEvents = const [],
+    this.signals = const [],
     this.window,
     this.generatedAtUnixMs,
     this.providerInfo,
@@ -443,6 +507,7 @@ class RaceEngineerAdviceResponse {
       (message != null && message!.trim().isNotEmpty) ||
       (advice != null && advice!.trim().isNotEmpty);
   bool get hasNoEvents => status == 'no_events';
+  bool get hasSignals => signals.isNotEmpty;
   bool get isRateLimited =>
       status == 'rate_limited' ||
       providerInfo?.finishReason == 'rate_limited' ||
@@ -458,6 +523,11 @@ class RaceEngineerAdviceResponse {
       referencedEvents:
           (payload['referencedEvents'] as List<dynamic>?)?.cast<String>() ??
           (payload['referencedEventIds'] as List<dynamic>?)?.cast<String>() ??
+          const [],
+      signals: (payload['signals'] as List<dynamic>?)
+          ?.whereType<Map<String, dynamic>>()
+          .map(RaceEngineerSignal.fromJson)
+          .toList(growable: false) ??
           const [],
       window: payload['window'] != null
           ? RaceEngineerAdviceWindow.fromJson(
@@ -479,6 +549,16 @@ class RaceEngineerAdviceResponse {
 int? _parseGeneratedAtMs(String? generatedAt) {
   if (generatedAt == null) return null;
   return DateTime.tryParse(generatedAt)?.millisecondsSinceEpoch;
+}
+
+String _humanizeSignalType(String type) {
+  final words = type.replaceAll('_', ' ').trim();
+  if (words.isEmpty) return 'Signal';
+  return words
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty)
+      .map((part) => part[0].toUpperCase() + part.substring(1))
+      .join(' ');
 }
 
 class EngineerEvent {

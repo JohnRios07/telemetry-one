@@ -127,6 +127,62 @@ void main() {
       expect(response.generatedAtUnixMs, 1770000000000);
     });
 
+    test('parses response without optional signals fields', () {
+      final response = RaceEngineerAdviceResponse.fromJson({
+        'sessionId': 'session_test_1',
+        'status': 'success',
+        'advice': 'Brake earlier into turn 1.',
+        'window': {
+          'sinceUnixMs': 1720656000000,
+          'untilUnixMs': 1720656060000,
+          'maxEvents': 10,
+        },
+      });
+
+      expect(response.signals, isEmpty);
+      expect(response.hasSignals, isFalse);
+      expect(response.window!.derivedSignalCount, isNull);
+    });
+
+    test('parses response with signals and derivedSignalCount', () {
+      final response = RaceEngineerAdviceResponse.fromJson({
+        'sessionId': 'session_test_1',
+        'status': 'success',
+        'message': 'Brake earlier into turn 1.',
+        'signals': [
+          {
+            'type': 'lap_pace_regression',
+            'severity': 'warning',
+            'message': 'Lap 4 is 1.2s slower than the best lap.',
+          },
+          {
+            'type': 'telemetry_gap_warning',
+            'status': 'info',
+            'title': 'Telemetry gap warning',
+            'summary': 'Missing telemetry in sector 2.',
+          },
+        ],
+        'window': {
+          'sinceUnixMs': 1720656000000,
+          'untilUnixMs': 1720656060000,
+          'maxEvents': 10,
+          'derivedSignalCount': 2,
+        },
+      });
+
+      expect(response.signals, hasLength(2));
+      expect(response.hasSignals, isTrue);
+      expect(response.window!.derivedSignalCount, 2);
+      expect(response.signals.first.displayLabel, 'Lap Pace Regression');
+      expect(
+        response.signals.first.displayMessage,
+        'Lap 4 is 1.2s slower than the best lap.',
+      );
+      expect(response.signals.first.displaySeverity, 'warning');
+      expect(response.signals.last.displayLabel, 'Telemetry gap warning');
+      expect(response.signals.last.displayMessage, 'Missing telemetry in sector 2.');
+    });
+
     test('parses success response with legacy advice field', () {
       final response = RaceEngineerAdviceResponse.fromJson({
         'sessionId': 'session_test_1',
