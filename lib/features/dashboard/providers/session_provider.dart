@@ -37,8 +37,8 @@ class _AutoLifecycle {
   /// Whether [recordPoint] has already auto-started recording once.
   bool triggered = false;
 
-  /// Whether the user explicitly called [stopRecording] while
-  /// [_autoTriggered] was true — prevents re-trigger after manual stop
+  /// Whether the caller explicitly invoked [stopRecording] while
+  /// auto-start was active — prevents re-trigger after an explicit stop
   /// within the same race.
   bool userStoppedAfterAutoStart = false;
 }
@@ -48,8 +48,12 @@ class SessionRecorder extends StateNotifier<SessionState> {
   final CompleteLapRecorder _lapRecorder;
   bool _isSaving = false;
   final _AutoLifecycle _auto = _AutoLifecycle();
+  int? _lastObservedPacketId;
   int? _lastObservedLap;
   Duration? _lastObservedLapTime;
+  /// Blocks auto-start after a packet rewind until telemetry leaves the
+  /// replayed lap-1 window and looks fresh again.
+  bool _suppressAutoStartUntilFreshTelemetry = false;
 
   /// Timestamp of the most recent completed lap. Used to detect
   /// session end in practice mode (where [TelemetryData.totalLaps] is 0).
@@ -59,6 +63,8 @@ class SessionRecorder extends StateNotifier<SessionState> {
   /// when no total-lap count is available from the game.
   /// Set long enough to cover pit stops (60–90 s).
   static const Duration _lapTimeout = Duration(seconds: 120);
+  static const Duration _nearZeroLapTimeThreshold = Duration(seconds: 2);
+  static const double _minimumAutoStartSpeedKmh = 1;
 
   SessionRecorder({
     SessionRepository? repository,
@@ -69,13 +75,17 @@ class SessionRecorder extends StateNotifier<SessionState> {
 
   /// Start recording telemetry data to a new session.
   void startRecording() {
+    if (state.isRecording || _isSaving) return;
+
     _isSaving = false;
     _lapRecorder.reset();
     _lastLapCompletedAt = null;
-    // Manual start resets auto-lifecycle so auto-start can work
-    // for a fresh session.
+    // A fresh session clears the auto-lifecycle so auto-start can work
+    // again after a completed or manually stopped recording.
     _auto.triggered = false;
     _auto.userStoppedAfterAutoStart = false;
+    _suppressAutoStartUntilFreshTelemetry = false;
+    _resetTelemetryObservation();
 
     final session = Session(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -93,11 +103,13 @@ class SessionRecorder extends StateNotifier<SessionState> {
   Future<void> stopRecording() async {
     if (!state.isRecording || state.currentSession == null || _isSaving) return;
 
-    // Remember the user chose to stop so auto-start won't re-trigger
-    // on subsequent laps.
+    // Remember the explicit stop so auto-start won't re-trigger on
+    // subsequent laps in the same race.
     if (_auto.triggered) {
       _auto.userStoppedAfterAutoStart = true;
     }
+
+    _resetTelemetryObservation();
 
     // Capture snapshot BEFORE any async gap to avoid race conditions.
     _isSaving = true;
@@ -113,40 +125,24 @@ class SessionRecorder extends StateNotifier<SessionState> {
 
   /// Called from the telemetry stream to buffer a data point.
   void recordPoint(TelemetryData data) {
-    if (_isSaving) return;
+    _updateRewindSuppression(data);
 
-    final int previousLap = _lastObservedLap ?? 0;
-    final bool inFirstLapStartWindow =
-        data.currentLap == 1 &&
-        data.currentLapTime != null &&
-        data.currentLapTime! <= const Duration(seconds: 2) &&
-        data.speedKmh > 0;
-    final bool wasAlreadyInFirstLapStartWindow =
-        previousLap == 1 &&
-        _lastObservedLapTime != null &&
-        _lastObservedLapTime! <= const Duration(seconds: 2);
-    final bool cleanFirstLapStart =
-        inFirstLapStartWindow && !wasAlreadyInFirstLapStartWindow;
+    if (_isSaving) return;
 
     // Auto-start when the first race lap is detected.
     // Fires at most once per recording cycle; after a manual stop it
-    // stays disabled until the next manual start or auto-stop.
-    if (!state.isRecording &&
-        !_isSaving &&
-        !_auto.triggered &&
-        !_auto.userStoppedAfterAutoStart) {
-      if (cleanFirstLapStart) {
-        startRecording();
-        _auto.triggered = true; // Re-assert after startRecording clears it.
-      } else {
-        _lastObservedLap = data.currentLap;
-        _lastObservedLapTime = data.currentLapTime;
+    // stays disabled until the next explicit start or auto-stop.
+    if (!state.isRecording) {
+      if (!_shouldAutoStart(data)) {
+        _markTelemetryObservation(data);
         return;
       }
+
+      startRecording();
+      _auto.triggered = true; // Re-assert after startRecording clears it.
     }
 
-    _lastObservedLap = data.currentLap;
-    _lastObservedLapTime = data.currentLapTime;
+    _markTelemetryObservation(data);
 
     if (!state.isRecording) return;
 
@@ -180,6 +176,54 @@ class SessionRecorder extends StateNotifier<SessionState> {
     }
   }
 
+  bool _shouldAutoStart(TelemetryData data) {
+    if (state.isRecording || _isSaving) return false;
+    if (_auto.triggered || _auto.userStoppedAfterAutoStart) return false;
+
+    final bool isCleanFirstLapWindow = _isCleanFirstLapWindow(data);
+    if (!isCleanFirstLapWindow) {
+      if (_suppressAutoStartUntilFreshTelemetry) {
+        _suppressAutoStartUntilFreshTelemetry = false;
+      }
+      return false;
+    }
+
+    if (_suppressAutoStartUntilFreshTelemetry) return false;
+
+    final lastPacketId = _lastObservedPacketId;
+    if (lastPacketId == null) return true;
+    if (data.packetId > lastPacketId) return true;
+    if (data.packetId == lastPacketId) return false;
+
+    final previousLap = _lastObservedLap;
+    final previousLapTime = _lastObservedLapTime;
+    final previousWasCleanStartWindow =
+        previousLap == 1 &&
+        previousLapTime != null &&
+        previousLapTime <= _nearZeroLapTimeThreshold;
+
+    return !previousWasCleanStartWindow;
+  }
+
+  bool _isCleanFirstLapWindow(TelemetryData data) {
+    if (data.packetId <= 0 || data.currentLap != 1) return false;
+
+    final currentLapTime = data.currentLapTime;
+    if (currentLapTime == null ||
+        currentLapTime > _nearZeroLapTimeThreshold) {
+      return false;
+    }
+
+    return data.speedKmh > _minimumAutoStartSpeedKmh;
+  }
+
+  void _updateRewindSuppression(TelemetryData data) {
+    final lastPacketId = _lastObservedPacketId;
+    if (lastPacketId != null && data.packetId < lastPacketId) {
+      _suppressAutoStartUntilFreshTelemetry = true;
+    }
+  }
+
   /// Initiate the auto-stop sequence.
   ///
   /// Captures the session snapshot synchronously (before any async gap)
@@ -208,6 +252,7 @@ class SessionRecorder extends StateNotifier<SessionState> {
       if (completedLaps.isEmpty) {
         _lapRecorder.reset();
         _isSaving = false;
+        _resetTelemetryObservation();
         state = const SessionState(status: RecordingStatus.idle);
         return;
       }
@@ -228,9 +273,11 @@ class SessionRecorder extends StateNotifier<SessionState> {
       await _repository.saveSession(finalSession);
       _lapRecorder.reset();
       _isSaving = false;
+      _resetTelemetryObservation();
 
       if (fromAutoStop) {
-        // Race ended naturally — reset so auto-start can work for the next one.
+        // Race ended naturally — reset auto-lifecycle, but keep rewind
+        // suppression until telemetry becomes fresh again.
         _auto.triggered = false;
         _auto.userStoppedAfterAutoStart = false;
       }
@@ -239,10 +286,23 @@ class SessionRecorder extends StateNotifier<SessionState> {
     } catch (e) {
       _lapRecorder.reset();
       _isSaving = false;
+      _resetTelemetryObservation();
       state = SessionState(
         status: RecordingStatus.idle,
         error: 'Failed to save session: $e',
       );
     }
+  }
+
+  void _resetTelemetryObservation() {
+    _lastObservedPacketId = null;
+    _lastObservedLap = null;
+    _lastObservedLapTime = null;
+  }
+
+  void _markTelemetryObservation(TelemetryData data) {
+    _lastObservedPacketId = data.packetId;
+    _lastObservedLap = data.currentLap;
+    _lastObservedLapTime = data.currentLapTime;
   }
 }

@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telemetry_one/core/models/telemetry_data.dart';
 import 'package:telemetry_one/core/recording/complete_lap_recorder.dart';
+import 'package:telemetry_one/core/storage/session_model.dart';
+import 'package:telemetry_one/core/storage/session_repository.dart';
 import 'package:telemetry_one/features/dashboard/providers/session_provider.dart';
 
 void main() {
@@ -18,6 +22,16 @@ void main() {
       expect(recorder.state.status, RecordingStatus.recording);
       expect(recorder.state.currentSession, isNotNull);
       expect(recorder.state.currentSession!.game, 'GT7');
+    });
+
+    test('startRecording is a no-op while already recording', () {
+      recorder.startRecording();
+      final firstSession = recorder.state.currentSession;
+
+      recorder.startRecording();
+
+      expect(recorder.state.status, RecordingStatus.recording);
+      expect(recorder.state.currentSession, same(firstSession));
     });
 
     test('stopRecording returns to idle cleanly when no laps completed', () async {
@@ -51,11 +65,13 @@ void main() {
       int currentLap = 1,
       int currentLapTimeMs = 500,
       double speedKmh = 120,
+      int totalLaps = 0,
     }) {
       return TelemetryData(
         timestamp: DateTime(2026),
         packetId: packetId,
         currentLap: currentLap,
+        totalLaps: totalLaps,
         currentLapTime: Duration(milliseconds: currentLapTimeMs),
         speedKmh: speedKmh,
         gear: 3,
@@ -85,23 +101,27 @@ void main() {
       expect(recorder.state.isRecording, false);
     });
 
+    test('does not auto-start when packetId is 0', () {
+      recorder.recordPoint(startPacket(packetId: 0));
+
+      expect(recorder.state.isRecording, false);
+    });
+
     test('does not auto-start when currentLapTime is large', () {
       recorder.recordPoint(startPacket(currentLapTimeMs: 5000));
 
       expect(recorder.state.isRecording, false);
     });
 
-    test('does not auto-start twice from the same window', () {
-      recorder.recordPoint(startPacket());
-      expect(recorder.state.isRecording, true);
+    test('ignores duplicate first-lap packets until a fresh packet arrives', () {
+      recorder.recordPoint(startPacket(packetId: 7, speedKmh: 0));
+      expect(recorder.state.isRecording, false);
 
-      // Same window — second packet should not re-trigger or create a
-      // second recording session.
-      recorder.recordPoint(startPacket(packetId: 2));
+      recorder.recordPoint(startPacket(packetId: 7, speedKmh: 120));
+      expect(recorder.state.isRecording, false);
+
+      recorder.recordPoint(startPacket(packetId: 8, speedKmh: 120));
       expect(recorder.state.isRecording, true);
-      // The session id should be the same (not a new session).
-      expect(recorder.state.currentSession!.id,
-          startsWith(recorder.state.currentSession!.id));
     });
 
     test('does not auto-start when already recording manually', () {
@@ -122,12 +142,18 @@ void main() {
       recorder = SessionRecorder(lapRecorder: CompleteLapRecorder());
     });
 
-    TelemetryData startPacket({int packetId = 1}) {
+    TelemetryData startPacket({
+      int packetId = 1,
+      int currentLap = 1,
+      int currentLapTimeMs = 500,
+      int totalLaps = 0,
+    }) {
       return TelemetryData(
         timestamp: DateTime(2026),
         packetId: packetId,
-        currentLap: 1,
-        currentLapTime: const Duration(milliseconds: 500),
+        currentLap: currentLap,
+        totalLaps: totalLaps,
+        currentLapTime: Duration(milliseconds: currentLapTimeMs),
         speedKmh: 120,
         gear: 3,
         rpm: 7000,
@@ -152,14 +178,85 @@ void main() {
       expect(recorder.state.isRecording, false);
     });
 
-    test('manual startRecording resets auto-lifecycle', () {
+    test('stale lap 1 packet after rewind does not auto-start without a clean window', () {
+      recorder.recordPoint(
+        startPacket(packetId: 10, currentLap: 2, currentLapTimeMs: 12000),
+      );
+
+      recorder.recordPoint(
+        startPacket(packetId: 4, currentLap: 1, currentLapTimeMs: 12000),
+      );
+
+      expect(recorder.state.isRecording, false);
+    });
+
+    test('packet rewind suppression only re-arms after telemetry is clearly fresh', () {
+      recorder.recordPoint(
+        startPacket(packetId: 10, currentLap: 2, currentLapTimeMs: 12000),
+      );
+
+      recorder.recordPoint(
+        startPacket(packetId: 4, currentLap: 1, currentLapTimeMs: 500),
+      );
+      expect(recorder.state.isRecording, false);
+
+      recorder.recordPoint(
+        startPacket(packetId: 5, currentLap: 1, currentLapTimeMs: 5000),
+      );
+      expect(recorder.state.isRecording, false);
+
+      recorder.recordPoint(
+        startPacket(packetId: 6, currentLap: 1, currentLapTimeMs: 500),
+      );
+
+      expect(recorder.state.isRecording, true);
+    });
+
+    test('save-window rewind blocks duplicate auto-start after auto-stop', () async {
+      final repository = _BlockingSessionRepository();
+      recorder = SessionRecorder(
+        repository: repository,
+        lapRecorder: CompleteLapRecorder(),
+      );
+
+      recorder.recordPoint(
+        startPacket(packetId: 10, currentLap: 1, currentLapTimeMs: 500),
+      );
+      expect(recorder.state.isRecording, true);
+
+      recorder.recordPoint(
+        startPacket(
+          packetId: 11,
+          currentLap: 2,
+          currentLapTimeMs: 200,
+          totalLaps: 1,
+        ),
+      );
+      expect(recorder.state.status, RecordingStatus.saving);
+
+      recorder.recordPoint(
+        startPacket(packetId: 4, currentLap: 1, currentLapTimeMs: 500),
+      );
+
+      repository.completeSave();
+      await repository.saveFinished.future;
+
+      expect(recorder.state.status, RecordingStatus.idle);
+
+      recorder.recordPoint(
+        startPacket(packetId: 5, currentLap: 1, currentLapTimeMs: 500),
+      );
+
+      expect(recorder.state.isRecording, false);
+    });
+
+    test('manual startRecording resets auto-lifecycle', () async {
       // Auto-start fires
       recorder.recordPoint(startPacket());
       expect(recorder.state.isRecording, true);
 
       // User manually stops
-      // ignore: unawaited — we just need the state change
-      recorder.stopRecording();
+      await recorder.stopRecording();
 
       // User manually starts a new session
       recorder.startRecording();
@@ -236,4 +333,25 @@ void main() {
       expect(recorder.state.status, RecordingStatus.idle);
     });
   });
+}
+
+class _BlockingSessionRepository extends SessionRepository {
+  final Completer<void> _saveGate = Completer<void>();
+  final Completer<void> saveFinished = Completer<void>();
+  int saveCalls = 0;
+
+  @override
+  Future<void> saveSession(Session session) async {
+    saveCalls += 1;
+    await _saveGate.future;
+    if (!saveFinished.isCompleted) {
+      saveFinished.complete();
+    }
+  }
+
+  void completeSave() {
+    if (!_saveGate.isCompleted) {
+      _saveGate.complete();
+    }
+  }
 }
