@@ -51,6 +51,9 @@ class SessionRecorder extends StateNotifier<SessionState> {
   int? _lastObservedPacketId;
   int? _lastObservedLap;
   Duration? _lastObservedLapTime;
+  /// Blocks auto-start after a packet rewind until telemetry leaves the
+  /// replayed lap-1 window and looks fresh again.
+  bool _suppressAutoStartUntilFreshTelemetry = false;
 
   /// Timestamp of the most recent completed lap. Used to detect
   /// session end in practice mode (where [TelemetryData.totalLaps] is 0).
@@ -81,6 +84,7 @@ class SessionRecorder extends StateNotifier<SessionState> {
     // again after a completed or manually stopped recording.
     _auto.triggered = false;
     _auto.userStoppedAfterAutoStart = false;
+    _suppressAutoStartUntilFreshTelemetry = false;
     _resetTelemetryObservation();
 
     final session = Session(
@@ -122,6 +126,9 @@ class SessionRecorder extends StateNotifier<SessionState> {
   /// Called from the telemetry stream to buffer a data point.
   void recordPoint(TelemetryData data) {
     if (_isSaving) return;
+
+    _updateRewindSuppression(data);
+
     // Auto-start when the first race lap is detected.
     // Fires at most once per recording cycle; after a manual stop it
     // stays disabled until the next explicit start or auto-stop.
@@ -173,15 +180,15 @@ class SessionRecorder extends StateNotifier<SessionState> {
     if (state.isRecording || _isSaving) return false;
     if (_auto.triggered || _auto.userStoppedAfterAutoStart) return false;
 
-    if (data.packetId <= 0 || data.currentLap != 1) return false;
-
-    final currentLapTime = data.currentLapTime;
-    if (currentLapTime == null ||
-        currentLapTime > _nearZeroLapTimeThreshold) {
+    final bool isCleanFirstLapWindow = _isCleanFirstLapWindow(data);
+    if (!isCleanFirstLapWindow) {
+      if (_suppressAutoStartUntilFreshTelemetry) {
+        _suppressAutoStartUntilFreshTelemetry = false;
+      }
       return false;
     }
 
-    if (data.speedKmh <= _minimumAutoStartSpeedKmh) return false;
+    if (_suppressAutoStartUntilFreshTelemetry) return false;
 
     final lastPacketId = _lastObservedPacketId;
     if (lastPacketId == null) return true;
@@ -196,6 +203,25 @@ class SessionRecorder extends StateNotifier<SessionState> {
         previousLapTime <= _nearZeroLapTimeThreshold;
 
     return !previousWasCleanStartWindow;
+  }
+
+  bool _isCleanFirstLapWindow(TelemetryData data) {
+    if (data.packetId <= 0 || data.currentLap != 1) return false;
+
+    final currentLapTime = data.currentLapTime;
+    if (currentLapTime == null ||
+        currentLapTime > _nearZeroLapTimeThreshold) {
+      return false;
+    }
+
+    return data.speedKmh > _minimumAutoStartSpeedKmh;
+  }
+
+  void _updateRewindSuppression(TelemetryData data) {
+    final lastPacketId = _lastObservedPacketId;
+    if (lastPacketId != null && data.packetId < lastPacketId) {
+      _suppressAutoStartUntilFreshTelemetry = true;
+    }
   }
 
   /// Initiate the auto-stop sequence.
@@ -253,6 +279,7 @@ class SessionRecorder extends StateNotifier<SessionState> {
         // Race ended naturally — reset so auto-start can work for the next one.
         _auto.triggered = false;
         _auto.userStoppedAfterAutoStart = false;
+        _suppressAutoStartUntilFreshTelemetry = false;
       }
 
       state = const SessionState(status: RecordingStatus.idle);

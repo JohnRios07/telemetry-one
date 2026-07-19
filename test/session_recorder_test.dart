@@ -182,6 +182,28 @@ void main() {
       expect(recorder.state.isRecording, false);
     });
 
+    test('packet rewind suppression only re-arms after telemetry is clearly fresh', () {
+      recorder.recordPoint(
+        startPacket(packetId: 10, currentLap: 2, currentLapTimeMs: 12000),
+      );
+
+      recorder.recordPoint(
+        startPacket(packetId: 4, currentLap: 1, currentLapTimeMs: 500),
+      );
+      expect(recorder.state.isRecording, false);
+
+      recorder.recordPoint(
+        startPacket(packetId: 5, currentLap: 1, currentLapTimeMs: 5000),
+      );
+      expect(recorder.state.isRecording, false);
+
+      recorder.recordPoint(
+        startPacket(packetId: 6, currentLap: 1, currentLapTimeMs: 500),
+      );
+
+      expect(recorder.state.isRecording, true);
+    });
+
     test('manual startRecording resets auto-lifecycle', () async {
       // Auto-start fires
       recorder.recordPoint(startPacket());
