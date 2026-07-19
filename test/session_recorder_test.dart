@@ -95,22 +95,27 @@ void main() {
       expect(recorder.state.isRecording, false);
     });
 
+    test('does not auto-start when packetId is 0', () {
+      recorder.recordPoint(startPacket(packetId: 0));
+
+      expect(recorder.state.isRecording, false);
+    });
+
     test('does not auto-start when currentLapTime is large', () {
       recorder.recordPoint(startPacket(currentLapTimeMs: 5000));
 
       expect(recorder.state.isRecording, false);
     });
 
-    test('does not auto-start twice from the same window', () {
-      recorder.recordPoint(startPacket(packetId: 1));
-      expect(recorder.state.isRecording, true);
-      final firstSession = recorder.state.currentSession;
+    test('ignores duplicate first-lap packets until a fresh packet arrives', () {
+      recorder.recordPoint(startPacket(packetId: 7, speedKmh: 0));
+      expect(recorder.state.isRecording, false);
 
-      // Same window — second packet should not re-trigger or create a
-      // second recording session.
-      recorder.recordPoint(startPacket(packetId: 2));
+      recorder.recordPoint(startPacket(packetId: 7, speedKmh: 120));
+      expect(recorder.state.isRecording, false);
+
+      recorder.recordPoint(startPacket(packetId: 8, speedKmh: 120));
       expect(recorder.state.isRecording, true);
-      expect(recorder.state.currentSession, same(firstSession));
     });
 
     test('does not auto-start when already recording manually', () {
