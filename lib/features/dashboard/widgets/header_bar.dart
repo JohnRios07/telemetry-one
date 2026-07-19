@@ -8,7 +8,6 @@ import '../../../../config/theme/app_typography.dart';
 import '../../../../core/backend/telemetry_frame_dto.dart';
 import '../../../../core/backend/v2_bridge_providers.dart';
 import '../providers/manual_track_selection_provider.dart';
-import '../../engineer/screens/engineer_sessions_screen.dart';
 import '../../settings/screens/settings_screen.dart';
 import '../providers/session_provider.dart';
 import '../providers/telemetry_provider.dart';
@@ -188,14 +187,6 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
           if (lapInfo.totalLaps > 0 || position > 0) _HeaderDivider(),
           if (lapInfo.totalLaps > 0 || position > 0) const SizedBox(width: 18),
 
-          _RecordingControl(
-            state: sessionState,
-            onStart: _startRecording,
-            onStop: _stopRecording,
-          ),
-
-          const SizedBox(width: 18),
-
           const V2SyncBadge(),
 
           const SizedBox(width: 12),
@@ -222,10 +213,6 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
               ),
             ),
           ),
-
-          const SizedBox(width: 18),
-
-          _EngineerEntryButton(onTap: _openEngineer),
 
           const SizedBox(width: 18),
 
@@ -282,24 +269,10 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
     return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
   }
 
-  void _openEngineer() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const EngineerSessionsScreen()),
-    );
-  }
-
   void _openSettings() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
     );
-  }
-
-  void _startRecording() {
-    ref.read(sessionRecorderProvider.notifier).startRecording();
-  }
-
-  Future<void> _stopRecording() async {
-    await ref.read(sessionRecorderProvider.notifier).stopRecording();
   }
 }
 
@@ -404,207 +377,6 @@ class _LiveDotState extends State<_LiveDot>
           ),
         );
       },
-    );
-  }
-}
-
-class _EngineerEntryButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _EngineerEntryButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.darkSurface,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: AppColors.neonCyan.withValues(alpha: 0.2)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.insights_rounded,
-              color: AppColors.neonCyan,
-              size: 18,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              'ENGINEER',
-              style: AppTypography.inter(
-                size: 11,
-                color: AppColors.textPrimary,
-                weight: FontWeight.w700,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RecordingControl extends StatelessWidget {
-  final SessionState state;
-  final VoidCallback onStart;
-  final Future<void> Function() onStop;
-
-  const _RecordingControl({
-    required this.state,
-    required this.onStart,
-    required this.onStop,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 180),
-      child: switch (state.status) {
-        RecordingStatus.idle => _RecordingButton(
-          key: const ValueKey<String>('record-idle'),
-          label: 'RECORD',
-          icon: const _RecordingDot(color: AppColors.error),
-          borderColor: AppColors.error.withValues(alpha: 0.28),
-          backgroundColor: AppColors.darkSurface,
-          onTap: onStart,
-        ),
-        RecordingStatus.recording => _RecordingButton(
-          key: const ValueKey<String>('record-active'),
-          label: 'STOP',
-          icon: const _RecordingStopIcon(),
-          borderColor: AppColors.error.withValues(alpha: 0.4),
-          backgroundColor: AppColors.error.withValues(alpha: 0.12),
-          onTap: () => unawaited(onStop()),
-        ),
-        RecordingStatus.saving => const _RecordingSavingButton(
-          key: ValueKey<String>('record-saving'),
-        ),
-      },
-    );
-  }
-}
-
-class _RecordingButton extends StatelessWidget {
-  final String label;
-  final Widget icon;
-  final Color borderColor;
-  final Color backgroundColor;
-  final VoidCallback onTap;
-
-  const _RecordingButton({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.borderColor,
-    required this.backgroundColor,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: borderColor),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            icon,
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: AppTypography.inter(
-                size: 11,
-                color: AppColors.textPrimary,
-                weight: FontWeight.w700,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RecordingSavingButton extends StatelessWidget {
-  const _RecordingSavingButton({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.darkSurface,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(
-            width: 14,
-            height: 14,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: AppColors.telemetryOrange,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'SAVING',
-            style: AppTypography.inter(
-              size: 11,
-              color: AppColors.textSecondary,
-              weight: FontWeight.w700,
-              letterSpacing: 1.2,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RecordingDot extends StatelessWidget {
-  final Color color;
-
-  const _RecordingDot({required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 8,
-      height: 8,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    );
-  }
-}
-
-class _RecordingStopIcon extends StatelessWidget {
-  const _RecordingStopIcon();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 8,
-      height: 8,
-      decoration: BoxDecoration(
-        color: AppColors.error,
-        borderRadius: BorderRadius.circular(1.5),
-      ),
     );
   }
 }

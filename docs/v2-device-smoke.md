@@ -1,6 +1,6 @@
 # V2 Device Smoke Test
 
-Verify the full device-to-backend lifecycle: start recording → backend session created → frame batches use `session_*` → stop recording → backend finish called.
+Verify the full device-to-backend lifecycle: telemetry starts flowing → backend session created → frame batches use `session_*` → backend finish called when the session ends.
 
 ## Prerequisites
 
@@ -49,11 +49,11 @@ Then:
 flutter-v2-smoke
 ```
 
-## Step 3 — Start recording
+## Step 3 — Verify session start
 
 1. Ensure PS5 is on with GT7 running, or telemetry simulator is sending data
 2. In the app, connect to the PS5 IP
-3. Enable backend sync: tap the power icon (⏻) in the **V2 sync badge** located in the HeaderBar next to the RECORD/STOP button
+3. Enable backend sync: tap the power icon (⏻) in the **V2 sync badge** in the HeaderBar
    - Badge shows: status dot + label (OFF/IDLE/SYNC/DOWN/REJ/FAIL)
    - When enabled, the badge expands to show the effective session ID and frame counters (P: pending, S: sent, A: accepted, R: rejected)
    - When R is non-zero, the top rejection reason code appears next to R (e.g. `R:2 invalid_throttle`)
@@ -87,13 +87,11 @@ curl -s http://129.213.127.143:8081/api/v1/sessions/session_abc123/frames | jq '
 
 The session ID should start with `session_` (not `local_`), confirming backend session alignment succeeded.
 
-## Step 5 — Stop recording
+## Step 5 — Verify session finish
 
-1. Disable backend sync: tap the power icon (⏻) in the **V2 sync badge** again
-   - Badge returns to `OFF` (dim) state
-   - Session ID and counters disappear from the badge
+1. End the telemetry session by disconnecting or stopping the data source, then confirm the backend session finishes automatically.
 2. **Check Flutter console logs** for:
-   - `[BackendSync] Finished backend session: session_abc123`
+    - `[BackendSync] Finished backend session: session_abc123`
 
 Expected evidence in Flutter console:
 
