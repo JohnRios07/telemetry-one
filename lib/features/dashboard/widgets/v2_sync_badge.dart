@@ -10,7 +10,7 @@ import '../../../../core/backend/v2_bridge_providers.dart';
 ///
 /// Only visible when [BackendConfig.useV2Data] is true (feature flag).
 /// Shows sync status, enable/disable toggle, effective session ID,
-/// and frame counters. Placed in [HeaderBar] near the RECORD/STOP controls.
+/// and frame counters. Placed in [HeaderBar] near the sync/status cluster.
 class V2SyncBadge extends ConsumerWidget {
   const V2SyncBadge({super.key});
 

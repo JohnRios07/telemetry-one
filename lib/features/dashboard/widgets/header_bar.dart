@@ -187,14 +187,6 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
           if (lapInfo.totalLaps > 0 || position > 0) _HeaderDivider(),
           if (lapInfo.totalLaps > 0 || position > 0) const SizedBox(width: 18),
 
-          _RecordingControl(
-            state: sessionState,
-            onStart: _startRecording,
-            onStop: _stopRecording,
-          ),
-
-          const SizedBox(width: 18),
-
           const V2SyncBadge(),
 
           const SizedBox(width: 12),
@@ -281,14 +273,6 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
     );
-  }
-
-  void _startRecording() {
-    ref.read(sessionRecorderProvider.notifier).startRecording();
-  }
-
-  Future<void> _stopRecording() async {
-    await ref.read(sessionRecorderProvider.notifier).stopRecording();
   }
 }
 
@@ -397,6 +381,7 @@ class _LiveDotState extends State<_LiveDot>
   }
 }
 
+<<<<<<< HEAD
 class _RecordingControl extends StatelessWidget {
   final SessionState state;
   final VoidCallback onStart;
@@ -556,6 +541,8 @@ class _RecordingStopIcon extends StatelessWidget {
   }
 }
 
+=======
+>>>>>>> bf18288 (fix: remove obsolete engineer header ui)
 String circuitDisplayText(TrackDetectionResponse? response, bool hasActiveSession) {
   if (response == null) return 'CIRCUIT UNKNOWN';
 

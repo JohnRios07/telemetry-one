@@ -231,30 +231,24 @@ void main() {
       expect(find.text('CIRCUIT UNKNOWN'), findsOneWidget);
     });
 
-    testWidgets('stale track detection is invalidated when recording starts',
+    testWidgets('does not show Engineer or Record/Stop controls',
         (tester) async {
       useWideScreen(tester);
       addTearDown(() => tester.view.resetPhysicalSize());
 
       await tester.pumpWidget(
         buildHeaderApp(
-          trackDetectionOverride: TrackDetectionResponse(
-            status: 'detected',
-            trackName: 'Suzuka Circuit',
+          sessionOverride: _MockSessionRecorder(
+            const SessionState(status: RecordingStatus.recording),
           ),
-          sessionOverride: _MockSessionRecorder(const SessionState()),
         ),
       );
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('Suzuka Circuit'), findsOneWidget);
-
-      await tester.tap(find.text('RECORD'));
-      await tester.pump();
-      await tester.pump();
-
-      expect(find.text('Suzuka Circuit'), findsOneWidget);
+      expect(find.text('ENGINEER'), findsNothing);
+      expect(find.text('RECORD'), findsNothing);
+      expect(find.text('STOP'), findsNothing);
     });
 
     testWidgets('settings icon opens the settings screen', (tester) async {
