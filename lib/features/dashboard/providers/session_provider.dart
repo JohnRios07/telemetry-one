@@ -48,6 +48,7 @@ class SessionRecorder extends StateNotifier<SessionState> {
   final CompleteLapRecorder _lapRecorder;
   bool _isSaving = false;
   final _AutoLifecycle _auto = _AutoLifecycle();
+  int? _lastObservedPacketId;
   int? _lastObservedLap;
   Duration? _lastObservedLapTime;
 
@@ -69,6 +70,8 @@ class SessionRecorder extends StateNotifier<SessionState> {
 
   /// Start recording telemetry data to a new session.
   void startRecording() {
+    if (state.isRecording || _isSaving) return;
+
     _isSaving = false;
     _lapRecorder.reset();
     _lastLapCompletedAt = null;
@@ -76,6 +79,7 @@ class SessionRecorder extends StateNotifier<SessionState> {
     // for a fresh session.
     _auto.triggered = false;
     _auto.userStoppedAfterAutoStart = false;
+    _resetTelemetryObservation();
 
     final session = Session(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -99,6 +103,8 @@ class SessionRecorder extends StateNotifier<SessionState> {
       _auto.userStoppedAfterAutoStart = true;
     }
 
+    _resetTelemetryObservation();
+
     // Capture snapshot BEFORE any async gap to avoid race conditions.
     _isSaving = true;
     final snapshot = state.currentSession!;
@@ -114,6 +120,11 @@ class SessionRecorder extends StateNotifier<SessionState> {
   /// Called from the telemetry stream to buffer a data point.
   void recordPoint(TelemetryData data) {
     if (_isSaving) return;
+
+    final int? lastPacketId = _lastObservedPacketId;
+    if (lastPacketId != null && data.packetId < lastPacketId) {
+      _resetTelemetryObservation();
+    }
 
     final int previousLap = _lastObservedLap ?? 0;
     final bool inFirstLapStartWindow =
@@ -139,14 +150,12 @@ class SessionRecorder extends StateNotifier<SessionState> {
         startRecording();
         _auto.triggered = true; // Re-assert after startRecording clears it.
       } else {
-        _lastObservedLap = data.currentLap;
-        _lastObservedLapTime = data.currentLapTime;
+        _markTelemetryObservation(data);
         return;
       }
     }
 
-    _lastObservedLap = data.currentLap;
-    _lastObservedLapTime = data.currentLapTime;
+    _markTelemetryObservation(data);
 
     if (!state.isRecording) return;
 
@@ -208,6 +217,7 @@ class SessionRecorder extends StateNotifier<SessionState> {
       if (completedLaps.isEmpty) {
         _lapRecorder.reset();
         _isSaving = false;
+        _resetTelemetryObservation();
         state = const SessionState(status: RecordingStatus.idle);
         return;
       }
@@ -228,6 +238,7 @@ class SessionRecorder extends StateNotifier<SessionState> {
       await _repository.saveSession(finalSession);
       _lapRecorder.reset();
       _isSaving = false;
+      _resetTelemetryObservation();
 
       if (fromAutoStop) {
         // Race ended naturally — reset so auto-start can work for the next one.
@@ -239,10 +250,23 @@ class SessionRecorder extends StateNotifier<SessionState> {
     } catch (e) {
       _lapRecorder.reset();
       _isSaving = false;
+      _resetTelemetryObservation();
       state = SessionState(
         status: RecordingStatus.idle,
         error: 'Failed to save session: $e',
       );
     }
+  }
+
+  void _resetTelemetryObservation() {
+    _lastObservedPacketId = null;
+    _lastObservedLap = null;
+    _lastObservedLapTime = null;
+  }
+
+  void _markTelemetryObservation(TelemetryData data) {
+    _lastObservedPacketId = data.packetId;
+    _lastObservedLap = data.currentLap;
+    _lastObservedLapTime = data.currentLapTime;
   }
 }

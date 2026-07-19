@@ -20,6 +20,16 @@ void main() {
       expect(recorder.state.currentSession!.game, 'GT7');
     });
 
+    test('startRecording is a no-op while already recording', () {
+      recorder.startRecording();
+      final firstSession = recorder.state.currentSession;
+
+      recorder.startRecording();
+
+      expect(recorder.state.status, RecordingStatus.recording);
+      expect(recorder.state.currentSession, same(firstSession));
+    });
+
     test('stopRecording returns to idle cleanly when no laps completed', () async {
       recorder.startRecording();
       expect(recorder.state.isRecording, true);
@@ -92,16 +102,15 @@ void main() {
     });
 
     test('does not auto-start twice from the same window', () {
-      recorder.recordPoint(startPacket());
+      recorder.recordPoint(startPacket(packetId: 1));
       expect(recorder.state.isRecording, true);
+      final firstSession = recorder.state.currentSession;
 
       // Same window — second packet should not re-trigger or create a
       // second recording session.
       recorder.recordPoint(startPacket(packetId: 2));
       expect(recorder.state.isRecording, true);
-      // The session id should be the same (not a new session).
-      expect(recorder.state.currentSession!.id,
-          startsWith(recorder.state.currentSession!.id));
+      expect(recorder.state.currentSession, same(firstSession));
     });
 
     test('does not auto-start when already recording manually', () {
@@ -122,12 +131,16 @@ void main() {
       recorder = SessionRecorder(lapRecorder: CompleteLapRecorder());
     });
 
-    TelemetryData startPacket({int packetId = 1}) {
+    TelemetryData startPacket({
+      int packetId = 1,
+      int currentLap = 1,
+      int currentLapTimeMs = 500,
+    }) {
       return TelemetryData(
         timestamp: DateTime(2026),
         packetId: packetId,
-        currentLap: 1,
-        currentLapTime: const Duration(milliseconds: 500),
+        currentLap: currentLap,
+        currentLapTime: Duration(milliseconds: currentLapTimeMs),
         speedKmh: 120,
         gear: 3,
         rpm: 7000,
@@ -152,14 +165,25 @@ void main() {
       expect(recorder.state.isRecording, false);
     });
 
-    test('manual startRecording resets auto-lifecycle', () {
+    test('stale lap 1 packet after rewind does not auto-start without a clean window', () {
+      recorder.recordPoint(
+        startPacket(packetId: 10, currentLap: 2, currentLapTimeMs: 12000),
+      );
+
+      recorder.recordPoint(
+        startPacket(packetId: 4, currentLap: 1, currentLapTimeMs: 12000),
+      );
+
+      expect(recorder.state.isRecording, false);
+    });
+
+    test('manual startRecording resets auto-lifecycle', () async {
       // Auto-start fires
       recorder.recordPoint(startPacket());
       expect(recorder.state.isRecording, true);
 
       // User manually stops
-      // ignore: unawaited — we just need the state change
-      recorder.stopRecording();
+      await recorder.stopRecording();
 
       // User manually starts a new session
       recorder.startRecording();
