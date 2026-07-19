@@ -8,7 +8,6 @@ import '../../../../config/theme/app_typography.dart';
 import '../../../../core/backend/telemetry_frame_dto.dart';
 import '../../../../core/backend/v2_bridge_providers.dart';
 import '../providers/manual_track_selection_provider.dart';
-import '../../engineer/screens/engineer_sessions_screen.dart';
 import '../../settings/screens/settings_screen.dart';
 import '../providers/session_provider.dart';
 import '../providers/telemetry_provider.dart';
@@ -225,10 +224,6 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
 
           const SizedBox(width: 18),
 
-          _EngineerEntryButton(onTap: _openEngineer),
-
-          const SizedBox(width: 18),
-
           Icon(
             Icons.sports_esports_rounded,
             color: isConnected ? AppColors.textPrimary : AppColors.textDim,
@@ -280,12 +275,6 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
 
   String _formatTime(DateTime t) {
     return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-  }
-
-  void _openEngineer() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const EngineerSessionsScreen()),
-    );
   }
 
   void _openSettings() {
@@ -404,48 +393,6 @@ class _LiveDotState extends State<_LiveDot>
           ),
         );
       },
-    );
-  }
-}
-
-class _EngineerEntryButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _EngineerEntryButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.darkSurface,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: AppColors.neonCyan.withValues(alpha: 0.2)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.insights_rounded,
-              color: AppColors.neonCyan,
-              size: 18,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              'ENGINEER',
-              style: AppTypography.inter(
-                size: 11,
-                color: AppColors.textPrimary,
-                weight: FontWeight.w700,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -275,6 +275,18 @@ void main() {
       expect(find.text('CLIENT HINTS'), findsOneWidget);
     });
 
+    testWidgets('does not show the obsolete ENGINEER header entry', (tester) async {
+      useWideScreen(tester);
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(buildHeaderApp());
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('ENGINEER'), findsNothing);
+      expect(find.byIcon(Icons.insights_rounded), findsNothing);
+    });
+
     testWidgets('manual track selection opens, submits, and reflects badge',
         (tester) async {
       useWideScreen(tester);

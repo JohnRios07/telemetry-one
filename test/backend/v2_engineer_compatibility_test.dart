@@ -12,7 +12,6 @@ import 'package:telemetry_one/features/engineer/analytics/recommendation_engine.
 import 'package:telemetry_one/features/engineer/analytics/session_analyzer.dart';
 import 'package:telemetry_one/features/engineer/domain/coach_report.dart';
 import 'package:telemetry_one/features/engineer/domain/session_summary.dart';
-import 'package:telemetry_one/features/engineer/providers/engineer_session_providers.dart';
 
 import '../support/coach_test_data.dart';
 
@@ -27,8 +26,8 @@ void main() {
       //
       // They NEVER import any backend_* file. This is a compile-time
       // guarantee — if a V1 provider depended on backend code, it would
-      // need an explicit import. The fact that engineer_session_providers.dart
-      // compiles without backend imports proves architectural separation.
+      // need an explicit import. The V1 analytics/domain code compiles
+      // without backend imports, which proves architectural separation.
       //
       // Verify by checking that V1 types work without any backend reference.
       final session = Session(
