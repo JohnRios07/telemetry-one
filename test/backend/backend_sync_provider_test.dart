@@ -1075,8 +1075,10 @@ void main() {
         config: config,
       );
 
-      // Step 1: enable — createSession starts but won't complete until we release
-      final enableFuture = notifier.setEnabled(true);
+      await notifier.setEnabled(true);
+
+      // Step 1: start session alignment explicitly — it won't complete until we release.
+      final enableFuture = notifier.ensureBackendSession();
 
       expect(notifier.state.alignmentStatus, SessionAlignmentStatus.pending);
       expect(controller.pendingCreateCount, 1);
@@ -1122,11 +1124,13 @@ void main() {
       );
 
       // Don't await enableFuture — let it race naturally
-      notifier.setEnabled(true);
+      await notifier.setEnabled(true);
+      final createFuture = notifier.ensureBackendSession();
       await notifier.setEnabled(false);
       controller.completePendingCreate();
       // Drain microtasks so the guard returns
       await Future<void>.delayed(Duration.zero);
+      await createFuture;
 
       // Assert disable won the race
       expect(notifier.state.status, SyncStatus.disabled);
@@ -1141,9 +1145,11 @@ void main() {
         parser: MockTelemetryParser(),
         config: config,
       );
-      notifier2.setEnabled(true);
+      await notifier2.setEnabled(true);
+      final createFuture2 = notifier2.ensureBackendSession();
       controller2.completePendingCreate();
       await Future<void>.delayed(Duration.zero);
+      await createFuture2;
 
       expect(notifier2.state.status, SyncStatus.idle);
       expect(notifier2.state.backendSessionId, 'session_backend_test_1');
@@ -1168,6 +1174,7 @@ void main() {
       );
 
       await notifier.setEnabled(true);
+      await notifier.ensureBackendSession();
       expect(notifier.state.backendSessionId, 'session_backend_test_1');
       expect(notifier.state.status, SyncStatus.idle);
 
@@ -1211,6 +1218,7 @@ void main() {
       );
 
       await notifier.setEnabled(true);
+      await notifier.ensureBackendSession();
       expect(notifier.state.backendSessionId, 'session_backend_test_1');
 
       // Disable immediately — no frames buffered
@@ -1237,6 +1245,7 @@ void main() {
       );
 
       await notifier.setEnabled(true);
+      await notifier.ensureBackendSession();
       expect(notifier.state.backendSessionId, 'session_backend_test_1');
 
       for (var i = 0; i < 3; i++) {
@@ -1287,7 +1296,7 @@ void main() {
     });
 
     group('V2 enabled — successful creation', () {
-      test('creates backend session on setEnabled', () async {
+      test('does not create backend session on setEnabled', () async {
         final client = _SessionCreateMockClient();
         final config = BackendConfig(
           useV2Data: true,
@@ -1307,18 +1316,38 @@ void main() {
 
         await notifier.setEnabled(true);
 
+        expect(client.createCallCount, 0);
+        expect(notifier.state.alignmentStatus, SessionAlignmentStatus.none);
+        expect(notifier.state.backendSessionId, isNull);
+        expect(notifier.state.effectiveSessionId, startsWith('local_'));
+        expect(notifier.state.status, SyncStatus.idle);
+
+        // No create request should be issued until recording actually starts.
+        expect(client.lastCreateRequest, isNull);
+      });
+
+      test('creates backend session only when explicitly started', () async {
+        final client = _SessionCreateMockClient();
+        final config = BackendConfig(
+          useV2Data: true,
+          defaultBatchSize: 1,
+          maxRetries: 0,
+          retryBaseDelay: Duration.zero,
+        );
+        final notifier = BackendSyncNotifier(
+          client: client,
+          parser: MockTelemetryParser(),
+          config: config,
+        );
+
+        await notifier.setEnabled(true);
+
+        await notifier.ensureBackendSession();
+
         expect(client.createCallCount, 1);
         expect(notifier.state.alignmentStatus, SessionAlignmentStatus.created);
         expect(notifier.state.backendSessionId, 'session_backend_test_1');
         expect(notifier.state.effectiveSessionId, 'session_backend_test_1');
-        expect(notifier.state.status, SyncStatus.idle);
-
-        // Verify request payload
-        expect(client.lastCreateRequest, isNotNull);
-        expect(client.lastCreateRequest!.source, 'flutter');
-        expect(client.lastCreateRequest!.game, 'gt7');
-        expect(client.lastCreateRequest!.platform, 'ps5');
-        expect(client.lastCreateRequest!.driverAlias, 'testdriver');
       });
 
       test('uses backend session ID for frame batch', () async {
@@ -1336,6 +1365,7 @@ void main() {
         );
 
         await notifier.setEnabled(true);
+        await notifier.ensureBackendSession();
         expect(notifier.state.backendSessionId, 'session_backend_test_1');
 
         notifier.injectPacket(Uint8List(1));
@@ -1361,6 +1391,7 @@ void main() {
         );
 
         await notifier.setEnabled(true);
+        await notifier.ensureBackendSession();
         expect(notifier.state.backendSessionId, 'session_backend_test_1');
         expect(client.finishCallCount, 0);
 
@@ -1387,6 +1418,7 @@ void main() {
         );
 
         await notifier.setEnabled(true);
+        await notifier.ensureBackendSession();
         expect(client.finishCallCount, 0);
 
         await notifier.disconnect();
@@ -1397,7 +1429,7 @@ void main() {
     });
 
     group('V2 enabled — creation failure fallback', () {
-      test('falls back to local ID on creation failure', () async {
+      test('marks alignment failed on creation failure', () async {
         final client = _SessionCreateFailMockClient();
         final config = BackendConfig(
           useV2Data: true,
@@ -1412,15 +1444,15 @@ void main() {
         );
 
         await notifier.setEnabled(true);
+        await notifier.ensureBackendSession();
 
         expect(client.createCallCount, 1);
         expect(notifier.state.alignmentStatus, SessionAlignmentStatus.failed);
         expect(notifier.state.backendSessionId, isNull);
-        expect(notifier.state.effectiveSessionId, startsWith('local_'));
         expect(notifier.state.status, SyncStatus.idle);
       });
 
-      test('uses local ID for frame batch when creation fails', () async {
+      test('does not post frames with local ID when creation fails', () async {
         final client = _SessionCreateFailMockClient();
         final config = BackendConfig(
           useV2Data: true,
@@ -1435,13 +1467,14 @@ void main() {
         );
 
         await notifier.setEnabled(true);
+        await notifier.ensureBackendSession();
         expect(notifier.state.backendSessionId, isNull);
 
         notifier.injectPacket(Uint8List(1));
         await Future<void>.delayed(Duration.zero);
 
-        // Frame batch should be sent with local session ID
-        expect(client.lastBatchSessionId, startsWith('local_'));
+        expect(client.batchCallCount, 0);
+        expect(client.lastBatchSessionId, isNull);
       });
 
       test('does not call finish when no backend session created', () async {
@@ -1459,6 +1492,7 @@ void main() {
         );
 
         await notifier.setEnabled(true);
+        await notifier.ensureBackendSession();
         expect(client.finishCallCount, 0);
 
         await notifier.setEnabled(false);
@@ -1486,6 +1520,7 @@ void main() {
 
         try {
           await notifier.setEnabled(true);
+          await notifier.ensureBackendSession();
           fail('Expected Error to propagate');
         } catch (_) {
           // Error propagated — alignmentStatus should have been reset
@@ -1517,6 +1552,7 @@ void main() {
         );
 
         await notifier.setEnabled(true);
+        await notifier.ensureBackendSession();
         expect(client.createCallCount, 1);
         expect(notifier.state.alignmentStatus, SessionAlignmentStatus.created);
         expect(notifier.state.backendSessionId, 'session_backend_test_1');
@@ -1539,6 +1575,7 @@ void main() {
         );
 
         await notifier.setEnabled(true);
+        await notifier.ensureBackendSession();
         expect(notifier.state.backendSessionId, 'session_backend_test_1');
         expect(notifier.state.alignmentStatus, SessionAlignmentStatus.created);
 
@@ -1572,6 +1609,7 @@ void main() {
         );
 
         await notifier.setEnabled(true);
+        await notifier.ensureBackendSession();
         expect(notifier.state.backendSessionId, 'session_backend_test_1');
 
         try {
@@ -1603,6 +1641,7 @@ void main() {
         );
 
         await notifier.setEnabled(true);
+        await notifier.ensureBackendSession();
         expect(notifier.state.backendSessionId, 'session_backend_test_1');
 
         await notifier.setEnabled(false);
@@ -1634,6 +1673,7 @@ void main() {
       );
 
       await notifier.setEnabled(true);
+      await notifier.ensureBackendSession();
       expect(notifier.state.backendSessionId, 'session_backend_test_1');
       expect(notifier.state.alignmentStatus, SessionAlignmentStatus.created);
 
@@ -1656,7 +1696,7 @@ void main() {
 
     test('session_not_found with realignment failure degrades and drops stale id',
         () async {
-      final client = _SessionNotFoundThenCreateFailMockClient(
+      final client = _SessionNotFoundThenRecreateFailMockClient(
         config: BackendConfig(maxRetries: 0, retryBaseDelay: Duration.zero),
       );
       final config = BackendConfig(
@@ -1672,16 +1712,21 @@ void main() {
       );
 
       await notifier.setEnabled(true);
-      expect(notifier.state.alignmentStatus, SessionAlignmentStatus.failed);
-      expect(notifier.state.backendSessionId, isNull);
-      expect(notifier.state.effectiveSessionId, startsWith('local_'));
+      await notifier.ensureBackendSession();
+      expect(notifier.state.alignmentStatus, SessionAlignmentStatus.created);
+      expect(notifier.state.backendSessionId, 'session_backend_test_1');
 
       notifier.injectPacket(Uint8List(1));
+      await Future<void>.delayed(Duration.zero);
+      expect(client.batchCallCount, 1);
+
+      notifier.injectPacket(Uint8List(2));
       await Future<void>.delayed(Duration.zero);
 
       expect(notifier.state.status, SyncStatus.degraded);
       expect(notifier.state.backendSessionId, isNull);
       expect(client.createCallCount, 2);
+      expect(notifier.state.effectiveSessionId, startsWith('local_'));
       expect(notifier.state.pendingFrames, greaterThan(0));
     });
 
@@ -1701,6 +1746,7 @@ void main() {
       );
 
       await notifier.setEnabled(true);
+      await notifier.ensureBackendSession();
 
       notifier.injectPacket(Uint8List(0));
       await Future<void>.delayed(Duration.zero);
@@ -1994,6 +2040,7 @@ class _SessionCreateMockClient extends BackendClient {
 class _SessionCreateFailMockClient extends BackendClient {
   int createCallCount = 0;
   int finishCallCount = 0;
+  int batchCallCount = 0;
   String? lastBatchSessionId;
 
   _SessionCreateFailMockClient({BackendConfig? config}) : super(config: config);
@@ -2026,6 +2073,7 @@ class _SessionCreateFailMockClient extends BackendClient {
     String sessionId,
     List<Map<String, dynamic>> frames,
   ) async {
+    batchCallCount++;
     lastBatchSessionId = sessionId;
     return IngestResponse(
       sessionId: sessionId,
@@ -2314,6 +2362,61 @@ class _SessionNotFoundThenCreateFailMockClient extends BackendClient {
         code: 'session_not_found',
         message: 'Session not found',
       ),
+    );
+  }
+}
+
+/// Mock where the initial session create succeeds, the second batch is
+/// rejected as session_not_found, and the re-alignment create fails.
+class _SessionNotFoundThenRecreateFailMockClient extends BackendClient {
+  int createCallCount = 0;
+  int batchCallCount = 0;
+  String? lastBatchSessionId;
+
+  _SessionNotFoundThenRecreateFailMockClient({BackendConfig? config})
+    : super(config: config);
+
+  @override
+  Future<CreateSessionResponse> createSession(
+    CreateSessionRequest request,
+  ) async {
+    createCallCount++;
+    if (createCallCount == 1) {
+      return CreateSessionResponse(sessionId: 'session_backend_test_1');
+    }
+    throw BackendRequestException(
+      statusCode: 0,
+      error: const BackendError(
+        code: 'network_error',
+        message: 'Connection failed',
+      ),
+    );
+  }
+
+  @override
+  Future<IngestResponse> postFrameBatch(
+    String sessionId,
+    List<Map<String, dynamic>> frames,
+  ) async {
+    batchCallCount++;
+    lastBatchSessionId = sessionId;
+    if (batchCallCount == 2) {
+      throw BackendRequestException(
+        statusCode: 404,
+        error: const BackendError(
+          code: 'session_not_found',
+          message: 'Session not found',
+        ),
+      );
+    }
+    return IngestResponse(
+      sessionId: sessionId,
+      receivedFrames: frames.length,
+      acceptedFrames: frames.length,
+      rejectedFrames: 0,
+      acceptedFromUnixMs: 1,
+      acceptedToUnixMs: 100,
+      status: 'accepted',
     );
   }
 }

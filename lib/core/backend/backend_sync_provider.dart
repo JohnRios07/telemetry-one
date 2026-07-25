@@ -198,22 +198,17 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
   }
 
   Future<void> setEnabled(bool enabled) async {
-    bool skipStateUpdate = false;
-
     try {
       if (enabled && !state.enabled) {
-        await _ensureBackendSession();
-        // Guard: if V2 is enabled and setEnabled(false) was called during the
-        // HTTP gap, alignmentStatus was reset to none — don't start flush timer.
-        if (_config.useV2Data && state.alignmentStatus == SessionAlignmentStatus.none) {
-          skipStateUpdate = true;
-        } else {
-          _startFlushTimer();
-        }
+        _startFlushTimer();
       } else if (!enabled && state.enabled) {
         state = state.copyWith(status: SyncStatus.disabled);
         if (_buffer.isNotEmpty) {
-          await _flush();
+          if (_config.useV2Data && state.backendSessionId == null) {
+            _buffer.clear();
+          } else {
+            await _flush();
+          }
         }
         try {
           await _finishBackendSession();
@@ -224,28 +219,28 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
         }
       }
     } finally {
-      if (!skipStateUpdate) {
-        state = state.copyWith(
-          status: enabled ? SyncStatus.idle : SyncStatus.disabled,
-          pendingFrames: enabled ? null : 0,
-          consecutiveFailures: enabled ? 0 : null,
-          lastRejection: null,
-          lastRejectionCode: null,
-          clearError: enabled,
-          backendSessionId: enabled ? state.backendSessionId : null,
-          alignmentStatus: enabled ? state.alignmentStatus : SessionAlignmentStatus.none,
-        );
-      }
+      state = state.copyWith(
+        status: enabled ? SyncStatus.idle : SyncStatus.disabled,
+        pendingFrames: enabled ? null : 0,
+        consecutiveFailures: enabled ? 0 : null,
+        lastRejection: null,
+        lastRejectionCode: null,
+        clearError: enabled,
+        backendSessionId: enabled ? state.backendSessionId : null,
+        alignmentStatus: enabled ? state.alignmentStatus : SessionAlignmentStatus.none,
+      );
     }
   }
 
   /// Attempt to create a backend session when V2 data mode is enabled.
   /// On success, [state.backendSessionId] is set to the backend-owned ID.
-  /// On failure, sync continues with the local session ID.
-  Future<void> _ensureBackendSession() async {
+  /// On failure, telemetry keeps buffering instead of falling back to local IDs.
+  Future<void> ensureBackendSession({bool flushBufferedFrames = true}) async {
+    if (state.status == SyncStatus.disabled) return;
     if (!_config.useV2Data) return;
     if (state.alignmentStatus == SessionAlignmentStatus.created) return;
     if (state.alignmentStatus == SessionAlignmentStatus.pending) return;
+    if (state.alignmentStatus == SessionAlignmentStatus.failed) return;
 
     state = state.copyWith(
       alignmentStatus: SessionAlignmentStatus.pending,
@@ -271,12 +266,16 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
       debugPrint(
         '[BackendSync] Backend session created: ${response.sessionId}',
       );
+
+      if (flushBufferedFrames && _buffer.isNotEmpty) {
+        await _flush();
+      }
     } on BackendRequestException catch (e) {
       state = state.copyWith(
         alignmentStatus: SessionAlignmentStatus.failed,
       );
       debugPrint(
-        '[BackendSync] Session creation failed (continuing with local ID): '
+        '[BackendSync] Session creation failed (buffering until recovery): '
         '${e.error.code} — ${e.error.message}',
       );
     } on Exception catch (e) {
@@ -284,7 +283,7 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
         alignmentStatus: SessionAlignmentStatus.failed,
       );
       debugPrint(
-        '[BackendSync] Session creation unexpected error (continuing with local ID): $e',
+        '[BackendSync] Session creation unexpected error (buffering until recovery): $e',
       );
     } finally {
       if (state.alignmentStatus == SessionAlignmentStatus.pending) {
@@ -293,6 +292,11 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
         );
       }
     }
+  }
+
+  /// Backward-compatible wrapper for older internal call sites.
+  Future<void> _ensureBackendSession() async {
+    await ensureBackendSession();
   }
 
   /// Feed already-parsed telemetry data into the sync buffer.
@@ -305,6 +309,10 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
     if (state.status == SyncStatus.disabled) return;
 
     _buffer.add(data);
+
+    if (_config.useV2Data && state.backendSessionId == null) {
+      return;
+    }
 
     if (_buffer.length >= _config.defaultBatchSize) {
       _flush();
@@ -351,12 +359,18 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
     }
 
     batch = List<TelemetryData>.from(_buffer.take(batchSize));
-    _buffer.removeRange(0, batchSize);
 
     frames = mapTelemetryBatch(batch);
     jsonFrames = frames.map((f) => f.toJson()).toList();
 
-    final capturedSessionId = state.effectiveSessionId;
+    final capturedSessionId = _config.useV2Data ? state.backendSessionId : state.sessionId;
+
+    if (capturedSessionId == null) {
+      _isFlushing = false;
+      return;
+    }
+
+    _buffer.removeRange(0, batchSize);
 
     state = state.copyWith(
       status: SyncStatus.syncing,
@@ -412,7 +426,7 @@ class BackendSyncNotifier extends StateNotifier<BackendSyncState> {
           backendSessionId: null,
           alignmentStatus: SessionAlignmentStatus.none,
         );
-        await _ensureBackendSession();
+        await ensureBackendSession(flushBufferedFrames: false);
         if (state.alignmentStatus == SessionAlignmentStatus.created) {
           try {
             final retryResponse = await _client.postFrameBatch(
