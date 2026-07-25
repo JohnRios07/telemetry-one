@@ -8,6 +8,7 @@ import '../../../core/models/telemetry_data.dart';
 import '../../../../config/theme/app_colors.dart';
 import '../../../../config/theme/app_typography.dart';
 import '../providers/session_provider.dart';
+import '../providers/recording_backend_session_coordinator.dart';
 import '../providers/telemetry_provider.dart';
 import '../widgets/header_bar.dart';
 import '../widgets/telemetry_graph.dart';
@@ -28,10 +29,16 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  late final RecordingBackendSessionCoordinator _coordinator;
+
   @override
   void initState() {
     super.initState();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    _coordinator = RecordingBackendSessionCoordinator(
+      sessionRecorder: ref.read(sessionRecorderProvider.notifier),
+      backendSync: ref.read(backendSyncProvider.notifier),
+    );
 
     ref.listenManual<TelemetryData?>(
       telemetryDataProvider,
@@ -39,8 +46,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         if (data == null) return;
         ref.read(telemetryBufferProvider.notifier).add(data.throttle, data.brake);
         ref.read(trackHistoryProvider.notifier).ingest(data);
-        ref.read(sessionRecorderProvider.notifier).recordPoint(data);
-        ref.read(backendSyncProvider.notifier).recordData(data);
+        _coordinator.handleTelemetry(data);
       },
       fireImmediately: true,
     );
