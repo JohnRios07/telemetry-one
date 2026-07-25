@@ -250,6 +250,52 @@ void main() {
       expect(recorder.state.isRecording, false);
     });
 
+    test(
+      'packetId 0 re-arms after suppression only once lap time progresses past the stale clean window',
+      () async {
+        final repository = _BlockingSessionRepository();
+        recorder = SessionRecorder(
+          repository: repository,
+          lapRecorder: CompleteLapRecorder(),
+        );
+
+        recorder.recordPoint(
+          startPacket(packetId: 10, currentLap: 1, currentLapTimeMs: 500),
+        );
+        expect(recorder.state.isRecording, true);
+
+        recorder.recordPoint(
+          startPacket(
+            packetId: 11,
+            currentLap: 2,
+            currentLapTimeMs: 200,
+            totalLaps: 1,
+          ),
+        );
+        expect(recorder.state.status, RecordingStatus.saving);
+
+        recorder.recordPoint(
+          startPacket(packetId: 4, currentLap: 1, currentLapTimeMs: 500),
+        );
+
+        repository.completeSave();
+        await repository.saveFinished.future;
+
+        expect(recorder.state.status, RecordingStatus.idle);
+
+        recorder.recordPoint(
+          startPacket(packetId: 0, currentLap: 1, currentLapTimeMs: 500),
+        );
+        expect(recorder.state.isRecording, false);
+
+        recorder.recordPoint(
+          startPacket(packetId: 0, currentLap: 1, currentLapTimeMs: 3000),
+        );
+
+        expect(recorder.state.isRecording, true);
+      },
+    );
+
     test('manual startRecording resets auto-lifecycle', () async {
       // Auto-start fires
       recorder.recordPoint(startPacket());

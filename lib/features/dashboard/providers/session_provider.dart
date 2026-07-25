@@ -186,16 +186,30 @@ class SessionRecorder extends StateNotifier<SessionState> {
 
     final lastPacketId = _lastObservedPacketId;
     if (_suppressAutoStartUntilFreshTelemetry) {
-      if (data.packetId <= 0 || lastPacketId == null || data.packetId <= lastPacketId) {
-        return false;
-      }
+      if (data.packetId > 0) {
+        if (lastPacketId == null || data.packetId <= lastPacketId) {
+          return false;
+        }
 
-      final currentLapTime = data.currentLapTime;
-      if (currentLapTime == null || currentLapTime > _nearZeroLapTimeThreshold) {
-        return false;
-      }
+        final currentLapTime = data.currentLapTime;
+        if (currentLapTime == null || currentLapTime > _nearZeroLapTimeThreshold) {
+          return false;
+        }
 
-      _suppressAutoStartUntilFreshTelemetry = false;
+        _suppressAutoStartUntilFreshTelemetry = false;
+      } else {
+        final currentLapTime = data.currentLapTime;
+        final previousLapTime = _lastObservedLapTime;
+
+        if (currentLapTime == null ||
+            previousLapTime == null ||
+            currentLapTime <= previousLapTime ||
+            currentLapTime <= _nearZeroLapTimeThreshold) {
+          return false;
+        }
+
+        _suppressAutoStartUntilFreshTelemetry = false;
+      }
     }
 
     if (data.packetId <= 0) {
