@@ -298,5 +298,43 @@ void main() {
       expect(finish.status, 'finished');
       expect(events.single.lapNumber, 2);
     });
+
+    test('parses race engineer signals from kind-only payloads', () {
+      final advice = RaceEngineerAdviceResponse.fromJson({
+        'sessionId': 'session_test',
+        'status': 'success',
+        'message': 'Brake earlier.',
+        'signals': [
+          {
+            'kind': 'off_track_stint_warning',
+            'severity': 'warning',
+            'summary': 'You spent too long off track.',
+          },
+        ],
+      });
+
+      final signal = advice.visibleSignals.single;
+
+      expect(signal.type, 'off_track_stint_warning');
+      expect(signal.isUserFacing, isTrue);
+      expect(signal.displayLabel, 'Off Track Stint Warning');
+      expect(signal.displayMessage, 'You spent too long off track.');
+    });
+
+    test('keeps legacy type and signalType compatibility', () {
+      final typeSignal = RaceEngineerSignal.fromJson({
+        'type': 'telemetry_gap_warning',
+        'message': 'Missing telemetry.',
+      });
+      final signalTypeSignal = RaceEngineerSignal.fromJson({
+        'signalType': 'lap_pace_regression',
+        'message': 'Lap pace is slipping.',
+      });
+
+      expect(typeSignal.type, 'telemetry_gap_warning');
+      expect(typeSignal.isUserFacing, isTrue);
+      expect(signalTypeSignal.type, 'lap_pace_regression');
+      expect(signalTypeSignal.isUserFacing, isTrue);
+    });
   });
 }
