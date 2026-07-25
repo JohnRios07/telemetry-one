@@ -441,8 +441,13 @@ class RaceEngineerSignal {
   }
 
   factory RaceEngineerSignal.fromJson(Map<String, dynamic> json) {
+    final String discriminator =
+        (json['kind'] as String?) ??
+        (json['type'] as String?) ??
+        (json['signalType'] as String?) ??
+        'unknown';
     return RaceEngineerSignal(
-      type: (json['type'] as String?) ?? (json['signalType'] as String?) ?? 'unknown',
+      type: discriminator,
       severity: json['severity'] as String?,
       label: (json['label'] as String?) ?? (json['name'] as String?),
       message:

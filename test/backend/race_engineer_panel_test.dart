@@ -152,6 +152,59 @@ void main() {
       expect(find.text('Missing telemetry in sector 2.'), findsOneWidget);
     });
 
+    testWidgets('renders kind-only user-facing signals', (tester) async {
+      await _pumpPanel(
+        tester,
+        RaceEngineerAdviceState(
+          status: RaceEngineerAdviceStatus.success,
+          response: RaceEngineerAdviceResponse.fromJson({
+            'sessionId': 'session_test_1',
+            'status': 'success',
+            'message': 'Brake earlier into turn 1.',
+            'signals': [
+              {
+                'kind': 'off_track_stint_warning',
+                'severity': 'warning',
+                'summary': 'You spent 2 laps off track.',
+              },
+            ],
+            'window': {'derivedSignalCount': 1},
+          }),
+          message: 'Brake earlier into turn 1.',
+        ),
+      );
+
+      expect(find.text('Success'), findsOneWidget);
+      expect(find.text('1 derived signals'), findsOneWidget);
+      expect(find.text('Off Track Stint Warning'), findsOneWidget);
+      expect(find.text('You spent 2 laps off track.'), findsOneWidget);
+    });
+
+    testWidgets('keeps internal kind-only signals hidden', (tester) async {
+      await _pumpPanel(
+        tester,
+        RaceEngineerAdviceState(
+          status: RaceEngineerAdviceStatus.success,
+          response: RaceEngineerAdviceResponse.fromJson({
+            'sessionId': 'session_test_1',
+            'status': 'success',
+            'message': 'Brake earlier into turn 1.',
+            'signals': [
+              {
+                'kind': 'trackbuilder_chord_excess',
+                'summary': 'Internal diagnostic payload.',
+              },
+            ],
+          }),
+          message: 'Brake earlier into turn 1.',
+        ),
+      );
+
+      expect(find.text('Internal signal'), findsNothing);
+      expect(find.text('Internal diagnostic payload.'), findsNothing);
+      expect(find.textContaining('derived signals'), findsNothing);
+    });
+
     testWidgets('filters internal diagnostic signals from normal UI', (
       tester,
     ) async {
