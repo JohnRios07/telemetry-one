@@ -38,6 +38,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     _coordinator = RecordingBackendSessionCoordinator(
       sessionRecorder: ref.read(sessionRecorderProvider.notifier),
       backendSync: ref.read(backendSyncProvider.notifier),
+      useV2Data: ref.read(backendV2EnabledProvider),
     );
 
     ref.listenManual<TelemetryData?>(
