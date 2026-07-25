@@ -180,17 +180,42 @@ class SessionRecorder extends StateNotifier<SessionState> {
     if (state.isRecording || _isSaving) return false;
     if (_auto.triggered || _auto.userStoppedAfterAutoStart) return false;
 
-    final bool isCleanFirstLapWindow = _isCleanFirstLapWindow(data);
-    if (!isCleanFirstLapWindow) {
-      if (_suppressAutoStartUntilFreshTelemetry) {
-        _suppressAutoStartUntilFreshTelemetry = false;
-      }
+    if (!_isValidAutoStartTelemetry(data)) {
       return false;
     }
 
-    if (_suppressAutoStartUntilFreshTelemetry) return false;
-
     final lastPacketId = _lastObservedPacketId;
+    if (_suppressAutoStartUntilFreshTelemetry) {
+      if (data.packetId > 0) {
+        if (lastPacketId == null || data.packetId <= lastPacketId) {
+          return false;
+        }
+
+        final currentLapTime = data.currentLapTime;
+        if (currentLapTime == null || currentLapTime > _nearZeroLapTimeThreshold) {
+          return false;
+        }
+
+        _suppressAutoStartUntilFreshTelemetry = false;
+      } else {
+        final currentLapTime = data.currentLapTime;
+        final previousLapTime = _lastObservedLapTime;
+
+        if (currentLapTime == null ||
+            previousLapTime == null ||
+            currentLapTime <= previousLapTime ||
+            currentLapTime <= _nearZeroLapTimeThreshold) {
+          return false;
+        }
+
+        _suppressAutoStartUntilFreshTelemetry = false;
+      }
+    }
+
+    if (data.packetId <= 0) {
+      return true;
+    }
+
     if (lastPacketId == null) return true;
     if (data.packetId > lastPacketId) return true;
     if (data.packetId == lastPacketId) return false;
@@ -205,19 +230,15 @@ class SessionRecorder extends StateNotifier<SessionState> {
     return !previousWasCleanStartWindow;
   }
 
-  bool _isCleanFirstLapWindow(TelemetryData data) {
-    if (data.packetId <= 0 || data.currentLap != 1) return false;
+  bool _isValidAutoStartTelemetry(TelemetryData data) {
+    if (data.currentLap != 1) return false;
 
-    final currentLapTime = data.currentLapTime;
-    if (currentLapTime == null ||
-        currentLapTime > _nearZeroLapTimeThreshold) {
-      return false;
-    }
-
-    return data.speedKmh > _minimumAutoStartSpeedKmh;
+    return data.isOnTrack && data.speedKmh > _minimumAutoStartSpeedKmh;
   }
 
   void _updateRewindSuppression(TelemetryData data) {
+    if (data.packetId <= 0) return;
+
     final lastPacketId = _lastObservedPacketId;
     if (lastPacketId != null && data.packetId < lastPacketId) {
       _suppressAutoStartUntilFreshTelemetry = true;
@@ -301,7 +322,9 @@ class SessionRecorder extends StateNotifier<SessionState> {
   }
 
   void _markTelemetryObservation(TelemetryData data) {
-    _lastObservedPacketId = data.packetId;
+    if (data.packetId > 0) {
+      _lastObservedPacketId = data.packetId;
+    }
     _lastObservedLap = data.currentLap;
     _lastObservedLapTime = data.currentLapTime;
   }

@@ -158,9 +158,11 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
 
           const SizedBox(width: 18),
 
-          if (lapInfo.totalLaps > 0)
+          if (lapInfo.currentLap > 0)
             Text(
-              'LAP ${lapInfo.currentLap} / ${lapInfo.totalLaps}',
+              lapInfo.totalLaps > 0
+                  ? 'LAP ${lapInfo.currentLap} / ${lapInfo.totalLaps}'
+                  : 'LAP ${lapInfo.currentLap}',
               style: AppTypography.orbitron(
                 size: 14,
                 weight: FontWeight.w600,
@@ -168,7 +170,7 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
                 letterSpacing: 1.2,
               ),
             ),
-          if (lapInfo.totalLaps > 0) const SizedBox(width: 18),
+          if (lapInfo.currentLap > 0) const SizedBox(width: 18),
 
           if (position > 0) _HeaderDivider(),
           if (position > 0) const SizedBox(width: 18),
@@ -184,8 +186,8 @@ class _HeaderBarState extends ConsumerState<HeaderBar> {
             ),
           if (position > 0) const SizedBox(width: 18),
 
-          if (lapInfo.totalLaps > 0 || position > 0) _HeaderDivider(),
-          if (lapInfo.totalLaps > 0 || position > 0) const SizedBox(width: 18),
+          if (lapInfo.currentLap > 0 || position > 0) _HeaderDivider(),
+          if (lapInfo.currentLap > 0 || position > 0) const SizedBox(width: 18),
 
           const V2SyncBadge(),
 

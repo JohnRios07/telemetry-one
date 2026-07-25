@@ -8,7 +8,9 @@ import 'package:telemetry_one/core/backend/track_layout_dto.dart';
 import 'package:telemetry_one/core/backend/settings_bootstrap_dto.dart';
 import 'package:telemetry_one/core/backend/v2_bridge_providers.dart';
 import 'package:telemetry_one/core/backend/backend_sync_provider.dart';
+import 'package:telemetry_one/core/models/telemetry_data.dart';
 import 'package:telemetry_one/features/dashboard/providers/session_provider.dart';
+import 'package:telemetry_one/features/dashboard/providers/telemetry_provider.dart';
 import 'package:telemetry_one/features/dashboard/widgets/header_bar.dart';
 
 /// Wide viewport (logical 1920×1080 @ 1x) so HeaderBar's dense Row fits.
@@ -20,6 +22,7 @@ void useWideScreen(WidgetTester tester) {
 Widget buildHeaderApp({
   Object? trackDetectionOverride,
   Object? sessionOverride,
+  TelemetryData? telemetryDataOverride,
   BackendSyncNotifier? syncOverride,
   BackendClient? backendClientOverride,
   BackendConfig? backendConfigOverride,
@@ -44,6 +47,11 @@ Widget buildHeaderApp({
       sessionRecorderProvider.overrideWith(
         (_) => sessionOverride as SessionRecorder,
       ),
+    );
+  }
+  if (telemetryDataOverride != null) {
+    overrides.add(
+      telemetryDataProvider.overrideWithValue(telemetryDataOverride),
     );
   }
   if (backendClientOverride != null) {
@@ -132,6 +140,44 @@ void main() {
   });
 
   group('HeaderBar circuit text widget', () {
+    testWidgets('shows LAP 1 when total laps are unknown', (tester) async {
+      useWideScreen(tester);
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        buildHeaderApp(
+          telemetryDataOverride: TelemetryData(
+            timestamp: DateTime(2026),
+            currentLap: 1,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('LAP 1'), findsOneWidget);
+      expect(find.textContaining('/'), findsNothing);
+    });
+
+    testWidgets('shows LAP 1 / 5 when total laps are known', (tester) async {
+      useWideScreen(tester);
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        buildHeaderApp(
+          telemetryDataOverride: TelemetryData(
+            timestamp: DateTime(2026),
+            currentLap: 1,
+            totalLaps: 5,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('LAP 1 / 5'), findsOneWidget);
+    });
+
     testWidgets('shows CIRCUIT UNKNOWN by default when no detection',
         (tester) async {
       useWideScreen(tester);
