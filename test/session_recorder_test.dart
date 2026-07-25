@@ -101,16 +101,16 @@ void main() {
       expect(recorder.state.isRecording, false);
     });
 
-    test('does not auto-start when packetId is 0', () {
+    test('auto-starts on lap 1 even when packetId is 0', () {
       recorder.recordPoint(startPacket(packetId: 0));
 
-      expect(recorder.state.isRecording, false);
+      expect(recorder.state.isRecording, true);
     });
 
-    test('does not auto-start when currentLapTime is large', () {
+    test('auto-starts on lap 1 even when currentLapTime is large', () {
       recorder.recordPoint(startPacket(currentLapTimeMs: 5000));
 
-      expect(recorder.state.isRecording, false);
+      expect(recorder.state.isRecording, true);
     });
 
     test('ignores duplicate first-lap packets until a fresh packet arrives', () {
