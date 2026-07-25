@@ -64,10 +64,8 @@ void main() {
 
       coordinator.handleTelemetry(_startPacket(packetId: 10));
       await Future<void>.delayed(Duration.zero);
-      await Future<void>.delayed(Duration.zero);
 
       coordinator.handleTelemetry(_startPacket(packetId: 11));
-      await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
 
       expect(client.createCallCount, 1);
@@ -94,8 +92,6 @@ void main() {
 
       coordinator.handleTelemetry(_startPacket(packetId: 21));
       await Future<void>.delayed(Duration.zero);
-      await Future<void>.delayed(Duration.zero);
-
       expect(client.createCallCount, 1);
       expect(sync.state.enabled, isTrue);
       expect(sync.state.alignmentStatus, SessionAlignmentStatus.failed);
