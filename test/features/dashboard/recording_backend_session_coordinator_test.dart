@@ -27,15 +27,17 @@ void main() {
       final coordinator = RecordingBackendSessionCoordinator(
         sessionRecorder: recorder,
         backendSync: sync,
+        useV2Data: true,
       );
 
-      await sync.setEnabled(true);
       expect(client.createCallCount, 0);
 
       coordinator.handleTelemetry(_startPacket());
       await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
 
       expect(recorder.state.isRecording, isTrue);
+      expect(sync.state.enabled, isTrue);
       expect(client.createCallCount, 1);
       expect(sync.state.alignmentStatus, SessionAlignmentStatus.created);
       expect(sync.state.backendSessionId, 'session_backend_test_1');
@@ -57,14 +59,15 @@ void main() {
       final coordinator = RecordingBackendSessionCoordinator(
         sessionRecorder: recorder,
         backendSync: sync,
+        useV2Data: true,
       );
-
-      await sync.setEnabled(true);
 
       coordinator.handleTelemetry(_startPacket(packetId: 10));
       await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
 
       coordinator.handleTelemetry(_startPacket(packetId: 11));
+      await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
 
       expect(client.createCallCount, 1);
@@ -86,14 +89,15 @@ void main() {
       final coordinator = RecordingBackendSessionCoordinator(
         sessionRecorder: recorder,
         backendSync: sync,
+        useV2Data: true,
       );
-
-      await sync.setEnabled(true);
 
       coordinator.handleTelemetry(_startPacket(packetId: 21));
       await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
 
       expect(client.createCallCount, 1);
+      expect(sync.state.enabled, isTrue);
       expect(sync.state.alignmentStatus, SessionAlignmentStatus.failed);
       expect(sync.state.backendSessionId, isNull);
       expect(client.batchCallCount, 0);

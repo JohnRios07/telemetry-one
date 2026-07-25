@@ -9,6 +9,7 @@ import 'package:telemetry_one/core/backend/settings_bootstrap_dto.dart';
 import 'package:telemetry_one/core/backend/v2_bridge_providers.dart';
 import 'package:telemetry_one/core/backend/backend_sync_provider.dart';
 import 'package:telemetry_one/core/models/telemetry_data.dart';
+import 'package:telemetry_one/core/recording/complete_lap_recorder.dart';
 import 'package:telemetry_one/features/dashboard/providers/session_provider.dart';
 import 'package:telemetry_one/features/dashboard/providers/telemetry_provider.dart';
 import 'package:telemetry_one/features/dashboard/widgets/header_bar.dart';
@@ -277,13 +278,30 @@ void main() {
       expect(find.text('CIRCUIT UNKNOWN'), findsOneWidget);
     });
 
-    testWidgets('does not show Engineer or Record/Stop controls',
+    testWidgets('shows REC manual override when idle and hides ENGINEER',
         (tester) async {
       useWideScreen(tester);
       addTearDown(() => tester.view.resetPhysicalSize());
 
       await tester.pumpWidget(
+        buildHeaderApp(backendConfigOverride: const BackendConfig(useV2Data: true)),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('ENGINEER'), findsNothing);
+      expect(find.text('REC'), findsOneWidget);
+      expect(find.text('RECORD'), findsNothing);
+      expect(find.text('STOP'), findsNothing);
+    });
+
+    testWidgets('shows STOP manual override while recording', (tester) async {
+      useWideScreen(tester);
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
         buildHeaderApp(
+          backendConfigOverride: const BackendConfig(useV2Data: true),
           sessionOverride: _MockSessionRecorder(
             const SessionState(status: RecordingStatus.recording),
           ),
@@ -293,8 +311,69 @@ void main() {
       await tester.pump();
 
       expect(find.text('ENGINEER'), findsNothing);
-      expect(find.text('RECORD'), findsNothing);
-      expect(find.text('STOP'), findsNothing);
+      expect(find.text('STOP'), findsOneWidget);
+      expect(find.text('REC'), findsNothing);
+    });
+
+    testWidgets('REC starts local recording and backend sync', (tester) async {
+      useWideScreen(tester);
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final recorder = SessionRecorder(lapRecorder: CompleteLapRecorder());
+      final syncNotifier = _CapturingOverrideSyncNotifier(
+        const BackendSyncState(sessionId: 'local_test'),
+      );
+
+      await tester.pumpWidget(
+        buildHeaderApp(
+          backendConfigOverride: const BackendConfig(useV2Data: true),
+          sessionOverride: recorder,
+          syncOverride: syncNotifier,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('REC'));
+      await tester.pump();
+
+      expect(recorder.state.isRecording, isTrue);
+      expect(syncNotifier.enabledCalls, [true]);
+      expect(syncNotifier.ensureSessionCalls, 1);
+      expect(syncNotifier.state.backendSessionId, 'session_manual_test_1');
+    });
+
+    testWidgets('STOP stops local recording and turns sync off', (tester) async {
+      useWideScreen(tester);
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final recorder = SessionRecorder(lapRecorder: CompleteLapRecorder());
+      recorder.startRecording();
+
+      final syncNotifier = _CapturingOverrideSyncNotifier(
+        BackendSyncState(
+          sessionId: 'local_test',
+          status: SyncStatus.idle,
+          backendSessionId: 'session_manual_test_1',
+          alignmentStatus: SessionAlignmentStatus.created,
+        ),
+      );
+
+      await tester.pumpWidget(
+        buildHeaderApp(
+          backendConfigOverride: const BackendConfig(useV2Data: true),
+          sessionOverride: recorder,
+          syncOverride: syncNotifier,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('STOP'));
+      await tester.pump();
+
+      expect(recorder.state.isRecording, isFalse);
+      expect(syncNotifier.enabledCalls, [false]);
+      expect(syncNotifier.state.status, SyncStatus.disabled);
+      expect(syncNotifier.state.backendSessionId, isNull);
     });
 
     testWidgets('settings icon opens the settings screen', (tester) async {
@@ -391,6 +470,40 @@ class _MockSessionRecorder extends SessionRecorder {
   void dispose() {
     // No-op to avoid referencing uninitialized test fields.
   }
+}
+
+class _CapturingOverrideSyncNotifier extends BackendSyncNotifier {
+  final List<bool> enabledCalls = [];
+  int ensureSessionCalls = 0;
+
+  _CapturingOverrideSyncNotifier(BackendSyncState state)
+    : super(config: const BackendConfig(useV2Data: true)) {
+    this.state = state;
+  }
+
+  @override
+  Future<void> setEnabled(bool enabled) async {
+    enabledCalls.add(enabled);
+    state = state.copyWith(
+      status: enabled ? SyncStatus.idle : SyncStatus.disabled,
+      backendSessionId: enabled ? state.backendSessionId : null,
+      alignmentStatus: enabled
+          ? state.alignmentStatus
+          : SessionAlignmentStatus.none,
+    );
+  }
+
+  @override
+  Future<void> ensureBackendSession({bool flushBufferedFrames = true}) async {
+    ensureSessionCalls += 1;
+    state = state.copyWith(
+      backendSessionId: 'session_manual_test_1',
+      alignmentStatus: SessionAlignmentStatus.created,
+    );
+  }
+
+  @override
+  void dispose() {}
 }
 
 class _FakeSettingsClient extends BackendClient {

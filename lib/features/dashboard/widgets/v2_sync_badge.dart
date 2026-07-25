@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,12 +7,14 @@ import '../../../../config/theme/app_colors.dart';
 import '../../../../config/theme/app_typography.dart';
 import '../../../../core/backend/backend_sync_provider.dart';
 import '../../../../core/backend/v2_bridge_providers.dart';
+import '../providers/session_provider.dart';
 
-/// Compact V2 backend sync status and toggle badge.
+/// Compact V2 backend sync status and manual recording override badge.
 ///
 /// Only visible when [BackendConfig.useV2Data] is true (feature flag).
-/// Shows sync status, enable/disable toggle, effective session ID,
-/// and frame counters. Placed in [HeaderBar] near the sync/status cluster.
+/// Shows sync status, effective session ID, frame counters, and a compact
+/// manual recording control that starts/stops local recording and sync.
+/// Placed in [HeaderBar] near the sync/status cluster.
 class V2SyncBadge extends ConsumerWidget {
   const V2SyncBadge({super.key});
 
@@ -20,9 +24,10 @@ class V2SyncBadge extends ConsumerWidget {
     if (!v2Enabled) return const SizedBox.shrink();
 
     final syncState = ref.watch(backendSyncProvider);
+    final recordingState = ref.watch(sessionRecorderProvider);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: AppColors.darkSurface,
         borderRadius: BorderRadius.circular(4),
@@ -48,34 +53,50 @@ class V2SyncBadge extends ConsumerWidget {
               ),
               const SizedBox(width: 6),
               Material(
-                color: syncState.enabled
-                    ? AppColors.success.withValues(alpha: 0.12)
-                    : AppColors.darkSurface,
+                color: recordingState.isRecording
+                    ? AppColors.error.withValues(alpha: 0.12)
+                    : AppColors.success.withValues(alpha: 0.12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(999),
                   side: BorderSide(
-                    color: syncState.enabled
-                        ? AppColors.success.withValues(alpha: 0.35)
-                        : AppColors.darkSurface,
+                    color: recordingState.isRecording
+                        ? AppColors.error.withValues(alpha: 0.35)
+                        : AppColors.success.withValues(alpha: 0.35),
                     width: 0.75,
                   ),
                 ),
                 child: InkWell(
-                  onTap: () => ref
-                      .read(backendSyncProvider.notifier)
-                      .setEnabled(!syncState.enabled),
+                  onTap: () => _toggleRecordingOverride(ref, recordingState),
                   customBorder: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(999),
                   ),
-                  child: SizedBox(
-                    width: 30,
-                    height: 30,
-                    child: Icon(
-                      Icons.power_settings_new_rounded,
-                      size: 16,
-                      color: syncState.enabled
-                          ? AppColors.success
-                          : AppColors.textDim,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          recordingState.isRecording
+                              ? Icons.stop_rounded
+                              : Icons.play_arrow_rounded,
+                          size: 16,
+                          color: recordingState.isRecording
+                              ? AppColors.error
+                              : AppColors.success,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          recordingState.isRecording ? 'STOP' : 'REC',
+                          style: AppTypography.inter(
+                            size: 9,
+                            weight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                            color: recordingState.isRecording
+                                ? AppColors.error
+                                : AppColors.success,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -105,6 +126,24 @@ class V2SyncBadge extends ConsumerWidget {
       ),
     );
   }
+}
+
+Future<void> _toggleRecordingOverride(
+  WidgetRef ref,
+  SessionState recordingState,
+) async {
+  final recorder = ref.read(sessionRecorderProvider.notifier);
+  final sync = ref.read(backendSyncProvider.notifier);
+
+  if (recordingState.isRecording) {
+    await recorder.stopRecording();
+    await sync.setEnabled(false);
+    return;
+  }
+
+  recorder.startRecording();
+  await sync.setEnabled(true);
+  unawaited(sync.ensureBackendSession());
 }
 
 String syncStatusLabel(SyncStatus status) {

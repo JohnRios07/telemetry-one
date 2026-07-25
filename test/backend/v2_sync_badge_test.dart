@@ -100,6 +100,7 @@ void main() {
       );
 
       expect(find.text('OFF'), findsOneWidget);
+      expect(find.text('REC'), findsOneWidget);
     });
   });
 
@@ -253,7 +254,7 @@ void main() {
       expect(find.textContaining('S:'), findsNothing);
     });
 
-    testWidgets('power button toggles sync state from a larger tap target', (
+    testWidgets('manual override starts recording and sync from the header pill', (
       tester,
     ) async {
       final syncNotifier = _CapturingSyncNotifier(
@@ -275,16 +276,20 @@ void main() {
         ),
       );
 
-      await tester.tap(find.byIcon(Icons.power_settings_new_rounded));
+      await tester.tap(find.text('REC'));
       await tester.pump();
 
       expect(syncNotifier.calls, [true]);
+      expect(syncNotifier.ensureSessionCalls, 1);
+      expect(syncNotifier.state.backendSessionId, 'session_manual_test_1');
+      expect(find.text('STOP'), findsOneWidget);
     });
   });
 }
 
 class _CapturingSyncNotifier extends BackendSyncNotifier {
   final List<bool> calls = [];
+  int ensureSessionCalls = 0;
 
   _CapturingSyncNotifier(BackendSyncState state)
     : super(config: const BackendConfig()) {
@@ -296,6 +301,15 @@ class _CapturingSyncNotifier extends BackendSyncNotifier {
     calls.add(enabled);
     state = state.copyWith(
       status: enabled ? SyncStatus.idle : SyncStatus.disabled,
+    );
+  }
+
+  @override
+  Future<void> ensureBackendSession({bool flushBufferedFrames = true}) async {
+    ensureSessionCalls += 1;
+    state = state.copyWith(
+      backendSessionId: 'session_manual_test_1',
+      alignmentStatus: SessionAlignmentStatus.created,
     );
   }
 
