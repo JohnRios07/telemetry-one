@@ -13,6 +13,7 @@ class RaceEngineerPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(raceEngineerAdviceAutoPollControllerProvider);
     final state = ref.watch(raceEngineerAdviceProvider);
     final availability = ref.watch(raceEngineerAdviceAvailabilityProvider);
     final loading = state.status == RaceEngineerAdviceStatus.loading;

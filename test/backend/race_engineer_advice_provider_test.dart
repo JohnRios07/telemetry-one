@@ -11,6 +11,7 @@ import 'package:telemetry_one/features/dashboard/providers/race_engineer_advice_
 class _FakeBackendClient extends BackendClient {
   int callCount = 0;
   String? lastSessionId;
+  RaceEngineerAdviceRequest? lastRequest;
   RaceEngineerAdviceResponse? response;
   BackendRequestException? exception;
   Object? thrown;
@@ -26,6 +27,7 @@ class _FakeBackendClient extends BackendClient {
   ]) async {
     callCount++;
     lastSessionId = sessionId;
+    lastRequest = request;
     final exception = this.exception;
     if (exception != null) throw exception;
     final thrown = this.thrown;
@@ -107,6 +109,38 @@ void main() {
       expect(client.lastSessionId, 'session_abc123');
       expect(state.status, RaceEngineerAdviceStatus.success);
       expect(state.message, 'Brake earlier into turn 1.');
+    });
+
+    test('uses sinceUnixMs from the previous successful response window', () async {
+      final client = _FakeBackendClient()
+        ..response = const RaceEngineerAdviceResponse(
+          sessionId: 'session_test_1',
+          status: 'success',
+          message: 'Brake earlier into turn 1.',
+          window: RaceEngineerAdviceWindow(untilUnixMs: 1720656012345),
+        );
+      final container = _container(
+        config: const BackendConfig(useV2Data: true),
+        syncState: const BackendSyncState(
+          sessionId: 'local_ignore',
+          backendSessionId: 'session_abc123',
+        ),
+        client: client,
+        adviceTimeout: raceEngineerAdviceRequestTimeout,
+      );
+      addTearDown(container.dispose);
+
+      await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
+      client.response = const RaceEngineerAdviceResponse(
+        sessionId: 'session_test_1',
+        status: 'success',
+        message: 'Turn in later.',
+      );
+
+      await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
+
+      expect(client.callCount, 2);
+      expect(client.lastRequest?.sinceUnixMs, 1720656012345);
     });
 
     test('maps rate_limited response to rateLimited status', () async {

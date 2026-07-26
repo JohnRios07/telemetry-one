@@ -7,6 +7,7 @@ import '../../../../core/backend/backend_client.dart';
 import '../../../../core/backend/backend_sync_provider.dart';
 import '../../../../core/backend/telemetry_frame_dto.dart';
 import '../../../../core/backend/v2_bridge_providers.dart';
+import 'session_provider.dart';
 
 enum RaceEngineerAdviceStatus {
   idle,
@@ -18,9 +19,19 @@ enum RaceEngineerAdviceStatus {
 }
 
 const Duration raceEngineerAdviceRequestTimeout = Duration(seconds: 25);
+const Duration raceEngineerAdviceAutoPollInterval = Duration(seconds: 12);
+const Duration raceEngineerAdviceAutoPollBackoff = Duration(seconds: 30);
 
 final raceEngineerAdviceRequestTimeoutProvider = Provider<Duration>((ref) {
   return raceEngineerAdviceRequestTimeout;
+});
+
+final raceEngineerAdviceAutoPollIntervalProvider = Provider<Duration>((ref) {
+  return raceEngineerAdviceAutoPollInterval;
+});
+
+final raceEngineerAdviceAutoPollBackoffProvider = Provider<Duration>((ref) {
+  return raceEngineerAdviceAutoPollBackoff;
 });
 
 class RaceEngineerAdviceAvailability {
@@ -89,6 +100,7 @@ class RaceEngineerAdviceNotifier
     extends StateNotifier<RaceEngineerAdviceState> {
   final Ref _ref;
   Timer? _cooldownTimer;
+  int? _lastSuccessfulSinceUnixMs;
 
   RaceEngineerAdviceNotifier(this._ref)
     : super(const RaceEngineerAdviceState.idle());
@@ -109,6 +121,13 @@ class RaceEngineerAdviceNotifier
     }
 
     final sessionId = _ref.read(backendSyncProvider).effectiveSessionId.trim();
+    final effectiveRequest = request.sinceUnixMs == null &&
+            _lastSuccessfulSinceUnixMs != null
+        ? RaceEngineerAdviceRequest(
+            sinceUnixMs: _lastSuccessfulSinceUnixMs,
+            maxEvents: request.maxEvents,
+          )
+        : request;
     state = const RaceEngineerAdviceState(
       status: RaceEngineerAdviceStatus.loading,
     );
@@ -117,7 +136,7 @@ class RaceEngineerAdviceNotifier
       final timeout = _ref.read(raceEngineerAdviceRequestTimeoutProvider);
       final response = await _ref
           .read(backendClientProvider)
-          .requestRaceEngineerAdvice(sessionId, request)
+          .requestRaceEngineerAdvice(sessionId, effectiveRequest)
           .timeout(
             timeout,
             onTimeout: () {
@@ -129,6 +148,7 @@ class RaceEngineerAdviceNotifier
           );
 
       if (response.hasNoEvents) {
+        _updateLastSuccessfulSinceUnixMs(response);
         _clearCooldownTimer();
         state = RaceEngineerAdviceState(
           status: RaceEngineerAdviceStatus.noEvents,
@@ -150,6 +170,7 @@ class RaceEngineerAdviceNotifier
         return;
       }
 
+      _updateLastSuccessfulSinceUnixMs(response);
       _clearCooldownTimer();
       state = RaceEngineerAdviceState(
         status: RaceEngineerAdviceStatus.success,
@@ -221,7 +242,111 @@ class RaceEngineerAdviceNotifier
     _cooldownTimer?.cancel();
     _cooldownTimer = null;
   }
+
+  void _updateLastSuccessfulSinceUnixMs(RaceEngineerAdviceResponse response) {
+    final nextSinceUnixMs =
+        response.window?.untilUnixMs ?? response.generatedAtUnixMs;
+    if (nextSinceUnixMs == null) return;
+    if (_lastSuccessfulSinceUnixMs == null ||
+        nextSinceUnixMs > _lastSuccessfulSinceUnixMs!) {
+      _lastSuccessfulSinceUnixMs = nextSinceUnixMs;
+    }
+  }
 }
+
+class RaceEngineerAdviceAutoPollController {
+  final Ref _ref;
+  Timer? _timer;
+  DateTime? _pausedUntil;
+
+  RaceEngineerAdviceAutoPollController(this._ref) {
+    _ref.listen(sessionRecorderProvider, (_, __) => _syncTimer());
+    _ref.listen(backendSyncProvider, (_, __) => _syncTimer());
+    _ref.listen(backendV2EnabledProvider, (_, __) => _syncTimer());
+    _ref.listen(raceEngineerAdviceProvider, (_, next) {
+      _handleAdviceState(next);
+    });
+    _syncTimer();
+  }
+
+  void dispose() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  void _syncTimer() {
+    final shouldPoll = _shouldAutoPoll();
+    if (!shouldPoll) {
+      _timer?.cancel();
+      _timer = null;
+      return;
+    }
+
+    _timer ??= Timer.periodic(
+      _ref.read(raceEngineerAdviceAutoPollIntervalProvider),
+      (_) => _tick(),
+    );
+  }
+
+  void _tick() {
+    if (!_shouldAutoPoll()) {
+      _syncTimer();
+      return;
+    }
+
+    final now = DateTime.now();
+    if (_pausedUntil != null && _pausedUntil!.isAfter(now)) return;
+
+    final state = _ref.read(raceEngineerAdviceProvider);
+    if (state.status == RaceEngineerAdviceStatus.loading) return;
+    if (state.isCooldownActive(now)) return;
+
+    unawaited(_ref.read(raceEngineerAdviceProvider.notifier).requestAdvice());
+  }
+
+  void _handleAdviceState(RaceEngineerAdviceState next) {
+    final now = DateTime.now();
+    switch (next.status) {
+      case RaceEngineerAdviceStatus.rateLimited:
+        final cooldownExpiresAt = next.cooldownExpiresAt;
+        _pausedUntil = cooldownExpiresAt ??
+            now.add(_ref.read(raceEngineerAdviceAutoPollBackoffProvider));
+        return;
+      case RaceEngineerAdviceStatus.error:
+        _pausedUntil = now.add(_ref.read(raceEngineerAdviceAutoPollBackoffProvider));
+        return;
+      case RaceEngineerAdviceStatus.success:
+      case RaceEngineerAdviceStatus.noEvents:
+        _pausedUntil = null;
+        return;
+      case RaceEngineerAdviceStatus.idle:
+      case RaceEngineerAdviceStatus.loading:
+        return;
+    }
+  }
+
+  bool _shouldAutoPoll() {
+    if (!_ref.read(backendV2EnabledProvider)) return false;
+
+    final sessionState = _ref.read(sessionRecorderProvider);
+    if (!sessionState.isRecording) return false;
+
+    final syncState = _ref.read(backendSyncProvider);
+    if (!syncState.enabled || !syncState.udpConnected) return false;
+
+    final availability = _ref.read(raceEngineerAdviceAvailabilityProvider);
+    if (!availability.canRequest) return false;
+
+    return true;
+  }
+}
+
+final raceEngineerAdviceAutoPollControllerProvider =
+    Provider.autoDispose<Object?>((ref) {
+      final controller = RaceEngineerAdviceAutoPollController(ref);
+      ref.onDispose(controller.dispose);
+      return controller;
+    });
 
 final raceEngineerAdviceProvider =
     StateNotifierProvider<RaceEngineerAdviceNotifier, RaceEngineerAdviceState>((
