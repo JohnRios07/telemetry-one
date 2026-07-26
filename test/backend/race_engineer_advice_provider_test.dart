@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telemetry_one/core/backend/backend_client.dart';
@@ -11,6 +13,8 @@ class _FakeBackendClient extends BackendClient {
   String? lastSessionId;
   RaceEngineerAdviceResponse? response;
   BackendRequestException? exception;
+  Object? thrown;
+  Completer<RaceEngineerAdviceResponse>? pendingResponse;
 
   _FakeBackendClient()
     : super(config: const BackendConfig(baseUrl: 'http://example.test'));
@@ -24,6 +28,10 @@ class _FakeBackendClient extends BackendClient {
     lastSessionId = sessionId;
     final exception = this.exception;
     if (exception != null) throw exception;
+    final thrown = this.thrown;
+    if (thrown != null) throw thrown;
+    final pendingResponse = this.pendingResponse;
+    if (pendingResponse != null) return pendingResponse.future;
     return response ??
         const RaceEngineerAdviceResponse(
           sessionId: 'session_test_1',
@@ -47,12 +55,16 @@ ProviderContainer _container({
   required BackendConfig config,
   required BackendSyncState syncState,
   required _FakeBackendClient client,
+  required Duration adviceTimeout,
 }) {
   return ProviderContainer(
     overrides: [
       backendConfigProvider.overrideWithValue(config),
       backendClientProvider.overrideWithValue(client),
       backendSyncProvider.overrideWith((ref) => _MockSyncNotifier(syncState)),
+      raceEngineerAdviceRequestTimeoutProvider.overrideWithValue(
+        adviceTimeout,
+      ),
     ],
   );
 }
@@ -65,6 +77,7 @@ void main() {
         config: const BackendConfig(useV2Data: true),
         syncState: const BackendSyncState(sessionId: 'local_test'),
         client: client,
+        adviceTimeout: raceEngineerAdviceRequestTimeout,
       );
       addTearDown(container.dispose);
 
@@ -83,6 +96,7 @@ void main() {
           backendSessionId: 'session_abc123',
         ),
         client: client,
+        adviceTimeout: raceEngineerAdviceRequestTimeout,
       );
       addTearDown(container.dispose);
 
@@ -111,6 +125,7 @@ void main() {
         config: const BackendConfig(useV2Data: true),
         syncState: const BackendSyncState(sessionId: 'session_test_1'),
         client: client,
+        adviceTimeout: raceEngineerAdviceRequestTimeout,
       );
       addTearDown(container.dispose);
 
@@ -139,6 +154,7 @@ void main() {
         config: const BackendConfig(useV2Data: true),
         syncState: const BackendSyncState(sessionId: 'session_test_1'),
         client: client,
+        adviceTimeout: raceEngineerAdviceRequestTimeout,
       );
       addTearDown(container.dispose);
 
@@ -166,6 +182,7 @@ void main() {
           config: const BackendConfig(useV2Data: true),
           syncState: const BackendSyncState(sessionId: 'session_test_1'),
           client: client,
+          adviceTimeout: raceEngineerAdviceRequestTimeout,
         );
         addTearDown(container.dispose);
 
@@ -200,6 +217,7 @@ void main() {
           config: const BackendConfig(useV2Data: true),
           syncState: const BackendSyncState(sessionId: 'session_test_1'),
           client: client,
+          adviceTimeout: raceEngineerAdviceRequestTimeout,
         );
         addTearDown(container.dispose);
 
@@ -224,6 +242,7 @@ void main() {
         config: const BackendConfig(useV2Data: true),
         syncState: const BackendSyncState(sessionId: 'session_test_1'),
         client: client,
+        adviceTimeout: raceEngineerAdviceRequestTimeout,
       );
       addTearDown(container.dispose);
 
@@ -245,6 +264,7 @@ void main() {
         config: const BackendConfig(useV2Data: true),
         syncState: const BackendSyncState(sessionId: 'session_test_1'),
         client: client,
+        adviceTimeout: raceEngineerAdviceRequestTimeout,
       );
       addTearDown(container.dispose);
 
@@ -263,6 +283,7 @@ void main() {
         config: const BackendConfig(useV2Data: false),
         syncState: const BackendSyncState(sessionId: 'session_test_1'),
         client: client,
+        adviceTimeout: raceEngineerAdviceRequestTimeout,
       );
       addTearDown(container.dispose);
 
@@ -279,6 +300,7 @@ void main() {
         config: const BackendConfig(useV2Data: true),
         syncState: const BackendSyncState(sessionId: 'local_test_1'),
         client: client,
+        adviceTimeout: raceEngineerAdviceRequestTimeout,
       );
       addTearDown(container.dispose);
 
@@ -296,6 +318,7 @@ void main() {
         config: const BackendConfig(useV2Data: true),
         syncState: const BackendSyncState(sessionId: 'local_test_1'),
         client: client,
+        adviceTimeout: raceEngineerAdviceRequestTimeout,
       );
       addTearDown(container.dispose);
 
@@ -305,6 +328,94 @@ void main() {
 
       expect(availability.canRequest, isFalse);
       expect(availability.message, 'Start a race to ask the engineer.');
+    });
+
+    test('hung request times out and transitions to error', () async {
+      final client = _FakeBackendClient()
+        ..pendingResponse = Completer<RaceEngineerAdviceResponse>();
+      final container = _container(
+        config: const BackendConfig(useV2Data: true),
+        syncState: const BackendSyncState(sessionId: 'session_test_1'),
+        client: client,
+        adviceTimeout: const Duration(milliseconds: 1),
+      );
+      addTearDown(container.dispose);
+
+      await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
+
+      final state = container.read(raceEngineerAdviceProvider);
+      expect(client.callCount, 1);
+      expect(state.status, RaceEngineerAdviceStatus.error);
+      expect(state.message, contains('timed out'));
+    });
+
+    test('unknown failure transitions to error instead of loading', () async {
+      final client = _FakeBackendClient()
+        ..thrown = StateError('parser exploded');
+      final container = _container(
+        config: const BackendConfig(useV2Data: true),
+        syncState: const BackendSyncState(sessionId: 'session_test_1'),
+        client: client,
+        adviceTimeout: raceEngineerAdviceRequestTimeout,
+      );
+      addTearDown(container.dispose);
+
+      await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
+
+      final state = container.read(raceEngineerAdviceProvider);
+      expect(client.callCount, 1);
+      expect(state.status, RaceEngineerAdviceStatus.error);
+      expect(state.message, 'Unexpected error while requesting Race Engineer advice.');
+    });
+
+    test('success response with real-shaped payload stays successful', () async {
+      final signalPayload = <String, dynamic>{
+        'kind': 'off_track_stint_warning',
+        'severity': 'warning',
+        'summary': 'You spent 2 laps off track.',
+      };
+      final client = _FakeBackendClient()
+        ..response = RaceEngineerAdviceResponse(
+          sessionId: 'session_test_1',
+          status: 'success',
+          message: '''
+### Lap 4
+
+Brake later into turn 1.
+
+- Release the brake more smoothly.
+- Commit to throttle earlier on exit.
+''',
+          signals: [
+            RaceEngineerSignal(
+              type: signalPayload['kind'] as String,
+              severity: signalPayload['severity'] as String,
+              summary: signalPayload['summary'] as String,
+            ),
+          ],
+          providerInfo: const RaceEngineerProviderInfo(
+            providerName: 'google-vertex-ai',
+            model: 'gemini-2.0-pro',
+            retryAfterSeconds: 17,
+          ),
+        );
+      final container = _container(
+        config: const BackendConfig(useV2Data: true),
+        syncState: const BackendSyncState(sessionId: 'session_test_1'),
+        client: client,
+        adviceTimeout: raceEngineerAdviceRequestTimeout,
+      );
+      addTearDown(container.dispose);
+
+      await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
+
+      final state = container.read(raceEngineerAdviceProvider);
+      expect(state.status, RaceEngineerAdviceStatus.success);
+      expect(state.message, contains('### Lap 4'));
+      expect(state.message, contains('Brake later into turn 1.'));
+      expect(state.response?.providerInfo?.providerName, 'google-vertex-ai');
+      expect(state.response?.providerInfo?.retryAfterSeconds, 17);
+      expect(state.response?.signals, isNotEmpty);
     });
   });
 }
