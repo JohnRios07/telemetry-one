@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/backend/backend_client.dart';
@@ -15,6 +16,12 @@ enum RaceEngineerAdviceStatus {
   rateLimited,
   error,
 }
+
+const Duration raceEngineerAdviceRequestTimeout = Duration(seconds: 25);
+
+final raceEngineerAdviceRequestTimeoutProvider = Provider<Duration>((ref) {
+  return raceEngineerAdviceRequestTimeout;
+});
 
 class RaceEngineerAdviceAvailability {
   final bool canRequest;
@@ -107,9 +114,19 @@ class RaceEngineerAdviceNotifier
     );
 
     try {
+      final timeout = _ref.read(raceEngineerAdviceRequestTimeoutProvider);
       final response = await _ref
           .read(backendClientProvider)
-          .requestRaceEngineerAdvice(sessionId, request);
+          .requestRaceEngineerAdvice(sessionId, request)
+          .timeout(
+            timeout,
+            onTimeout: () {
+              throw TimeoutException(
+                'Race Engineer advice request timed out after '
+                '${timeout.inSeconds} seconds.',
+              );
+            },
+          );
 
       if (response.hasNoEvents) {
         _clearCooldownTimer();
@@ -139,6 +156,12 @@ class RaceEngineerAdviceNotifier
         response: response,
         message: response.message ?? response.advice,
       );
+    } on TimeoutException {
+      _clearCooldownTimer();
+      state = const RaceEngineerAdviceState(
+        status: RaceEngineerAdviceStatus.error,
+        message: 'Race Engineer request timed out. Please try again.',
+      );
     } on BackendRequestException catch (e) {
       _clearCooldownTimer();
       state = RaceEngineerAdviceState(
@@ -150,6 +173,19 @@ class RaceEngineerAdviceNotifier
       state = RaceEngineerAdviceState(
         status: RaceEngineerAdviceStatus.error,
         message: e.toString(),
+      );
+    } on Object catch (error, stackTrace) {
+      _clearCooldownTimer();
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'RaceEngineerAdviceNotifier.requestAdvice',
+        ),
+      );
+      state = const RaceEngineerAdviceState(
+        status: RaceEngineerAdviceStatus.error,
+        message: 'Unexpected error while requesting Race Engineer advice.',
       );
     }
   }
