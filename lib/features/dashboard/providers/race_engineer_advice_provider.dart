@@ -101,6 +101,8 @@ class RaceEngineerAdviceNotifier
   final Ref _ref;
   Timer? _cooldownTimer;
   int? _lastSuccessfulSinceUnixMs;
+  String? _lastRequestSessionId;
+  String? _lastRequestEffectiveSessionId;
 
   RaceEngineerAdviceNotifier(this._ref)
     : super(const RaceEngineerAdviceState.idle());
@@ -108,6 +110,8 @@ class RaceEngineerAdviceNotifier
   Future<void> requestAdvice({
     RaceEngineerAdviceRequest request = const RaceEngineerAdviceRequest(),
   }) async {
+    _syncRequestScope();
+
     if (state.status == RaceEngineerAdviceStatus.loading) return;
     if (state.isCooldownActive()) return;
 
@@ -250,6 +254,20 @@ class RaceEngineerAdviceNotifier
     if (_lastSuccessfulSinceUnixMs == null ||
         nextSinceUnixMs > _lastSuccessfulSinceUnixMs!) {
       _lastSuccessfulSinceUnixMs = nextSinceUnixMs;
+    }
+  }
+
+  void _syncRequestScope() {
+    final sessionState = _ref.read(sessionRecorderProvider);
+    final nextSessionId = sessionState.currentSession?.id.trim();
+    final nextEffectiveSessionId =
+        _ref.read(backendSyncProvider).effectiveSessionId.trim();
+
+    if (nextSessionId != _lastRequestSessionId ||
+        nextEffectiveSessionId != _lastRequestEffectiveSessionId) {
+      _lastSuccessfulSinceUnixMs = null;
+      _lastRequestSessionId = nextSessionId;
+      _lastRequestEffectiveSessionId = nextEffectiveSessionId;
     }
   }
 }

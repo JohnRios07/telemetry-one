@@ -170,6 +170,88 @@ void main() {
       expect(client.lastRequest?.sinceUnixMs, 1720656012345);
     });
 
+    test(
+      'resets cached sinceUnixMs when the session scope changes and reuses the new cursor',
+      () async {
+        final client = _FakeBackendClient()
+          ..response = const RaceEngineerAdviceResponse(
+            sessionId: 'session_a',
+            status: 'success',
+            message: 'Brake earlier into turn 1.',
+            window: RaceEngineerAdviceWindow(untilUnixMs: 1720656012345),
+          );
+
+        late _MockSyncNotifier syncNotifier;
+        late _MockSessionRecorder sessionRecorder;
+        final container = ProviderContainer(
+          overrides: [
+            backendConfigProvider.overrideWithValue(
+              const BackendConfig(useV2Data: true),
+            ),
+            backendClientProvider.overrideWithValue(client),
+            backendSyncProvider.overrideWith((ref) {
+              syncNotifier = _MockSyncNotifier(
+                const BackendSyncState(
+                  sessionId: 'local_a',
+                  backendSessionId: 'session_a',
+                ),
+              );
+              return syncNotifier;
+            }),
+            sessionRecorderProvider.overrideWith((ref) {
+              sessionRecorder = _MockSessionRecorder(
+                SessionState(
+                  status: RecordingStatus.recording,
+                  currentSession: Session(
+                    id: 'local_a',
+                    startTime: DateTime.fromMillisecondsSinceEpoch(
+                      1720656000000,
+                    ),
+                    game: 'GT7',
+                  ),
+                ),
+              );
+              return sessionRecorder;
+            }),
+            raceEngineerAdviceRequestTimeoutProvider.overrideWithValue(
+              raceEngineerAdviceRequestTimeout,
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
+        expect(client.callCount, 1);
+        expect(client.lastRequest?.sinceUnixMs, isNull);
+
+        syncNotifier.state = syncNotifier.state.copyWith(
+          backendSessionId: 'session_b',
+        );
+        sessionRecorder.state = SessionState(
+          status: RecordingStatus.recording,
+          currentSession: Session(
+            id: 'local_b',
+            startTime: DateTime.fromMillisecondsSinceEpoch(1720657000000),
+            game: 'GT7',
+          ),
+        );
+        client.response = const RaceEngineerAdviceResponse(
+          sessionId: 'session_b',
+          status: 'success',
+          message: 'Turn in later.',
+          window: RaceEngineerAdviceWindow(untilUnixMs: 1720657012345),
+        );
+
+        await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
+        expect(client.callCount, 2);
+        expect(client.lastRequest?.sinceUnixMs, isNull);
+
+        await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
+        expect(client.callCount, 3);
+        expect(client.lastRequest?.sinceUnixMs, 1720657012345);
+      },
+    );
+
     test('maps rate_limited response to rateLimited status', () async {
       final client = _FakeBackendClient()
         ..response = const RaceEngineerAdviceResponse(
