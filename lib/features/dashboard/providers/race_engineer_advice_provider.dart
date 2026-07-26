@@ -96,13 +96,28 @@ class RaceEngineerAdviceState {
 
 const Object _unchanged = Object();
 
+class _RaceEngineerRequestScope {
+  final String sessionId;
+  final String effectiveSessionId;
+
+  const _RaceEngineerRequestScope({
+    required this.sessionId,
+    required this.effectiveSessionId,
+  });
+
+  bool matches(_RaceEngineerRequestScope other) {
+    return sessionId == other.sessionId &&
+        effectiveSessionId == other.effectiveSessionId;
+  }
+}
+
 class RaceEngineerAdviceNotifier
     extends StateNotifier<RaceEngineerAdviceState> {
   final Ref _ref;
   Timer? _cooldownTimer;
   int? _lastSuccessfulSinceUnixMs;
-  String? _lastRequestSessionId;
-  String? _lastRequestEffectiveSessionId;
+  _RaceEngineerRequestScope? _lastRequestScope;
+  _RaceEngineerRequestScope? _activeRequestScope;
 
   RaceEngineerAdviceNotifier(this._ref)
     : super(const RaceEngineerAdviceState.idle());
@@ -124,7 +139,9 @@ class RaceEngineerAdviceNotifier
       return;
     }
 
-    final sessionId = _ref.read(backendSyncProvider).effectiveSessionId.trim();
+    final requestScope = _currentRequestScope();
+    _activeRequestScope = requestScope;
+    final sessionId = requestScope.effectiveSessionId;
     final effectiveRequest = request.sinceUnixMs == null &&
             _lastSuccessfulSinceUnixMs != null
         ? RaceEngineerAdviceRequest(
@@ -150,6 +167,11 @@ class RaceEngineerAdviceNotifier
               );
             },
           );
+
+      if (!_canApplyResponse(response, requestScope)) {
+        _discardStaleResponse(requestScope);
+        return;
+      }
 
       if (response.hasNoEvents) {
         _updateLastSuccessfulSinceUnixMs(response);
@@ -212,6 +234,10 @@ class RaceEngineerAdviceNotifier
         status: RaceEngineerAdviceStatus.error,
         message: 'Unexpected error while requesting Race Engineer advice.',
       );
+    } finally {
+      if (_activeRequestScope != null && _activeRequestScope!.matches(requestScope)) {
+        _activeRequestScope = null;
+      }
     }
   }
 
@@ -258,16 +284,37 @@ class RaceEngineerAdviceNotifier
   }
 
   void _syncRequestScope() {
-    final sessionState = _ref.read(sessionRecorderProvider);
-    final nextSessionId = sessionState.currentSession?.id.trim();
-    final nextEffectiveSessionId =
-        _ref.read(backendSyncProvider).effectiveSessionId.trim();
+    final nextScope = _currentRequestScope();
 
-    if (nextSessionId != _lastRequestSessionId ||
-        nextEffectiveSessionId != _lastRequestEffectiveSessionId) {
+    if (_lastRequestScope == null || !_lastRequestScope!.matches(nextScope)) {
       _lastSuccessfulSinceUnixMs = null;
-      _lastRequestSessionId = nextSessionId;
-      _lastRequestEffectiveSessionId = nextEffectiveSessionId;
+      _lastRequestScope = nextScope;
+    }
+  }
+
+  _RaceEngineerRequestScope _currentRequestScope() {
+    final sessionState = _ref.read(sessionRecorderProvider);
+    return _RaceEngineerRequestScope(
+      sessionId: sessionState.currentSession?.id.trim() ?? '',
+      effectiveSessionId: _ref.read(backendSyncProvider).effectiveSessionId.trim(),
+    );
+  }
+
+  bool _canApplyResponse(
+    RaceEngineerAdviceResponse response,
+    _RaceEngineerRequestScope requestScope,
+  ) {
+    final currentScope = _currentRequestScope();
+    return currentScope.matches(requestScope) &&
+        response.sessionId.trim() == currentScope.effectiveSessionId;
+  }
+
+  void _discardStaleResponse(_RaceEngineerRequestScope requestScope) {
+    if (_activeRequestScope != null && _activeRequestScope!.matches(requestScope)) {
+      _activeRequestScope = null;
+    }
+    if (mounted && state.status == RaceEngineerAdviceStatus.loading) {
+      state = const RaceEngineerAdviceState.idle();
     }
   }
 }

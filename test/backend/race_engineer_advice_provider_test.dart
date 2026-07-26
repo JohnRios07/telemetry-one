@@ -37,8 +37,8 @@ class _FakeBackendClient extends BackendClient {
     final pendingResponse = this.pendingResponse;
     if (pendingResponse != null) return pendingResponse.future;
     return response ??
-        const RaceEngineerAdviceResponse(
-          sessionId: 'session_test_1',
+        RaceEngineerAdviceResponse(
+          sessionId: lastSessionId ?? 'session_test_1',
           status: 'success',
           message: 'Brake earlier into turn 1.',
         );
@@ -118,6 +118,11 @@ void main() {
 
     test('manual request uses effective session id and maps success', () async {
       final client = _FakeBackendClient();
+      client.response = const RaceEngineerAdviceResponse(
+        sessionId: 'session_abc123',
+        status: 'success',
+        message: 'Brake earlier into turn 1.',
+      );
       final container = _container(
         config: const BackendConfig(useV2Data: true),
         syncState: const BackendSyncState(
@@ -141,7 +146,7 @@ void main() {
     test('uses sinceUnixMs from the previous successful response window', () async {
       final client = _FakeBackendClient()
         ..response = const RaceEngineerAdviceResponse(
-          sessionId: 'session_test_1',
+          sessionId: 'session_abc123',
           status: 'success',
           message: 'Brake earlier into turn 1.',
           window: RaceEngineerAdviceWindow(untilUnixMs: 1720656012345),
@@ -159,7 +164,7 @@ void main() {
 
       await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
       client.response = const RaceEngineerAdviceResponse(
-        sessionId: 'session_test_1',
+        sessionId: 'session_abc123',
         status: 'success',
         message: 'Turn in later.',
       );
@@ -245,6 +250,109 @@ void main() {
         await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
         expect(client.callCount, 2);
         expect(client.lastRequest?.sinceUnixMs, isNull);
+
+        await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
+        expect(client.callCount, 3);
+        expect(client.lastRequest?.sinceUnixMs, 1720657012345);
+      },
+    );
+
+    test(
+      'discards late response from previous session without seeding the next cursor',
+      () async {
+        final pendingA = Completer<RaceEngineerAdviceResponse>();
+        final client = _FakeBackendClient()..pendingResponse = pendingA;
+
+        late _MockSyncNotifier syncNotifier;
+        late _MockSessionRecorder sessionRecorder;
+        final container = ProviderContainer(
+          overrides: [
+            backendConfigProvider.overrideWithValue(
+              const BackendConfig(useV2Data: true),
+            ),
+            backendClientProvider.overrideWithValue(client),
+            backendSyncProvider.overrideWith((ref) {
+              syncNotifier = _MockSyncNotifier(
+                const BackendSyncState(
+                  sessionId: 'local_a',
+                  backendSessionId: 'session_a',
+                ),
+              );
+              return syncNotifier;
+            }),
+            sessionRecorderProvider.overrideWith((ref) {
+              sessionRecorder = _MockSessionRecorder(
+                SessionState(
+                  status: RecordingStatus.recording,
+                  currentSession: Session(
+                    id: 'local_a',
+                    startTime: DateTime.fromMillisecondsSinceEpoch(
+                      1720656000000,
+                    ),
+                    game: 'GT7',
+                  ),
+                ),
+              );
+              return sessionRecorder;
+            }),
+            raceEngineerAdviceRequestTimeoutProvider.overrideWithValue(
+              raceEngineerAdviceRequestTimeout,
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final firstRequest = container
+            .read(raceEngineerAdviceProvider.notifier)
+            .requestAdvice();
+
+        expect(client.callCount, 1);
+        expect(client.lastRequest?.sinceUnixMs, isNull);
+        expect(container.read(raceEngineerAdviceProvider).status, RaceEngineerAdviceStatus.loading);
+
+        syncNotifier.state = syncNotifier.state.copyWith(
+          backendSessionId: 'session_b',
+        );
+        sessionRecorder.state = SessionState(
+          status: RecordingStatus.recording,
+          currentSession: Session(
+            id: 'local_b',
+            startTime: DateTime.fromMillisecondsSinceEpoch(1720657000000),
+            game: 'GT7',
+          ),
+        );
+
+        pendingA.complete(
+          const RaceEngineerAdviceResponse(
+            sessionId: 'session_a',
+            status: 'success',
+            message: 'Brake earlier into turn 1.',
+            window: RaceEngineerAdviceWindow(untilUnixMs: 1720656012345),
+          ),
+        );
+        await firstRequest;
+
+        final afterStale = container.read(raceEngineerAdviceProvider);
+        expect(afterStale.status, RaceEngineerAdviceStatus.idle);
+        expect(afterStale.response, isNull);
+
+        client.pendingResponse = null;
+        client.response = const RaceEngineerAdviceResponse(
+          sessionId: 'session_b',
+          status: 'success',
+          message: 'Turn in later.',
+          window: RaceEngineerAdviceWindow(untilUnixMs: 1720657012345),
+        );
+
+        await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
+        expect(client.callCount, 2);
+        expect(client.lastRequest?.sinceUnixMs, isNull);
+
+        client.response = const RaceEngineerAdviceResponse(
+          sessionId: 'session_b',
+          status: 'success',
+          message: 'Hold the line.',
+        );
 
         await container.read(raceEngineerAdviceProvider.notifier).requestAdvice();
         expect(client.callCount, 3);
