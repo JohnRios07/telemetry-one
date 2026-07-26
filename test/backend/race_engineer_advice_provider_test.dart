@@ -7,6 +7,8 @@ import 'package:telemetry_one/core/backend/backend_config.dart';
 import 'package:telemetry_one/core/backend/backend_sync_provider.dart';
 import 'package:telemetry_one/core/backend/telemetry_frame_dto.dart';
 import 'package:telemetry_one/features/dashboard/providers/race_engineer_advice_provider.dart';
+import 'package:telemetry_one/features/dashboard/providers/session_provider.dart';
+import 'package:telemetry_one/core/storage/session_model.dart';
 
 class _FakeBackendClient extends BackendClient {
   int callCount = 0;
@@ -51,6 +53,31 @@ class _MockSyncNotifier extends BackendSyncNotifier {
 
   @override
   void dispose() {}
+}
+
+class _MockSessionRecorder extends SessionRecorder {
+  _MockSessionRecorder(SessionState state) : super() {
+    this.state = state;
+  }
+
+  @override
+  void dispose() {}
+}
+
+class _AutoPollFakeNotifier extends RaceEngineerAdviceNotifier {
+  int requestCount = 0;
+
+  _AutoPollFakeNotifier(super.ref);
+
+  @override
+  Future<void> requestAdvice({
+    RaceEngineerAdviceRequest request = const RaceEngineerAdviceRequest(),
+  }) async {
+    requestCount++;
+    state = const RaceEngineerAdviceState(
+      status: RaceEngineerAdviceStatus.loading,
+    );
+  }
 }
 
 ProviderContainer _container({
@@ -176,6 +203,79 @@ void main() {
 
       expect(client.callCount, 1);
     });
+
+    test(
+      'auto-poll resumes after cooldown expiry without extending backoff',
+      () async {
+        late _AutoPollFakeNotifier notifier;
+        final container = ProviderContainer(
+          overrides: [
+            backendConfigProvider.overrideWithValue(
+              const BackendConfig(useV2Data: true),
+            ),
+            backendSyncProvider.overrideWith(
+              (ref) => _MockSyncNotifier(
+                const BackendSyncState(
+                  sessionId: 'local_1',
+                  status: SyncStatus.idle,
+                  backendSessionId: 'session_test_1',
+                  udpConnected: true,
+                ),
+              ),
+            ),
+            sessionRecorderProvider.overrideWith(
+              (ref) => _MockSessionRecorder(
+                SessionState(
+                  status: RecordingStatus.recording,
+                  currentSession: Session(
+                    id: 'local_1',
+                    startTime: DateTime.fromMillisecondsSinceEpoch(
+                      1720656000000,
+                    ),
+                    game: 'GT7',
+                  ),
+                ),
+              ),
+            ),
+            raceEngineerAdviceProvider.overrideWith((ref) {
+              notifier = _AutoPollFakeNotifier(ref);
+              return notifier;
+            }),
+            raceEngineerAdviceAutoPollIntervalProvider.overrideWithValue(
+              const Duration(milliseconds: 60),
+            ),
+            raceEngineerAdviceAutoPollBackoffProvider.overrideWithValue(
+              const Duration(milliseconds: 80),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final subscription = container.listen(
+          raceEngineerAdviceAutoPollControllerProvider,
+          (_, __) {},
+          fireImmediately: true,
+        );
+        addTearDown(subscription.close);
+
+        notifier.state = RaceEngineerAdviceState(
+          status: RaceEngineerAdviceStatus.rateLimited,
+          response: const RaceEngineerAdviceResponse(
+            sessionId: 'session_test_1',
+            status: 'rate_limited',
+            providerInfo: RaceEngineerProviderInfo(retryAfterSeconds: 20),
+          ),
+          cooldownExpiresAt: DateTime.now().add(const Duration(milliseconds: 20)),
+        );
+
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        notifier.state = notifier.state.copyWith(cooldownExpiresAt: null);
+
+        await Future<void>.delayed(const Duration(milliseconds: 70));
+
+        expect(notifier.requestCount, 1);
+      },
+    );
 
     test('maps rate_limited response without fallback message', () async {
       final client = _FakeBackendClient()

@@ -263,8 +263,8 @@ class RaceEngineerAdviceAutoPollController {
     _ref.listen(sessionRecorderProvider, (_, __) => _syncTimer());
     _ref.listen(backendSyncProvider, (_, __) => _syncTimer());
     _ref.listen(backendV2EnabledProvider, (_, __) => _syncTimer());
-    _ref.listen(raceEngineerAdviceProvider, (_, next) {
-      _handleAdviceState(next);
+    _ref.listen(raceEngineerAdviceProvider, (previous, next) {
+      _handleAdviceState(previous, next);
     });
     _syncTimer();
   }
@@ -304,13 +304,19 @@ class RaceEngineerAdviceAutoPollController {
     unawaited(_ref.read(raceEngineerAdviceProvider.notifier).requestAdvice());
   }
 
-  void _handleAdviceState(RaceEngineerAdviceState next) {
+  void _handleAdviceState(
+    RaceEngineerAdviceState? previous,
+    RaceEngineerAdviceState next,
+  ) {
     final now = DateTime.now();
     switch (next.status) {
       case RaceEngineerAdviceStatus.rateLimited:
         final cooldownExpiresAt = next.cooldownExpiresAt;
-        _pausedUntil = cooldownExpiresAt ??
-            now.add(_ref.read(raceEngineerAdviceAutoPollBackoffProvider));
+        if (cooldownExpiresAt != null) {
+          _pausedUntil = cooldownExpiresAt;
+        } else if (previous?.status != RaceEngineerAdviceStatus.rateLimited) {
+          _pausedUntil = now.add(_ref.read(raceEngineerAdviceAutoPollBackoffProvider));
+        }
         return;
       case RaceEngineerAdviceStatus.error:
         _pausedUntil = now.add(_ref.read(raceEngineerAdviceAutoPollBackoffProvider));

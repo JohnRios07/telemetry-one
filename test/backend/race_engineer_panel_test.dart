@@ -317,7 +317,9 @@ void main() {
       expect(find.text('Ask Engineer'), findsOneWidget);
     });
 
-    testWidgets('renders rate_limited with provider info', (tester) async {
+    testWidgets('renders rate_limited without provider diagnostics', (
+      tester,
+    ) async {
       await _pumpPanel(
         tester,
         const RaceEngineerAdviceState(
@@ -339,8 +341,8 @@ void main() {
 
       expect(find.textContaining('rate-limited'), findsOneWidget);
       expect(find.textContaining('17'), findsOneWidget);
-      expect(find.textContaining('google-vertex-ai'), findsOneWidget);
-      expect(find.textContaining('gemini-2.0-pro'), findsOneWidget);
+      expect(find.text('google-vertex-ai'), findsNothing);
+      expect(find.text('gemini-2.0-pro'), findsNothing);
       expect(find.text('Fallback: Lift and coast.'), findsOneWidget);
       expect(find.text('1 events referenced'), findsOneWidget);
       expect(find.text('Ask Engineer'), findsOneWidget);

@@ -181,13 +181,6 @@ class _RateLimitedBody extends StatelessWidget {
       warning = 'AI provider is rate-limited. Try again in ~${seconds}s.';
     }
 
-    final name = providerInfo?.providerName ?? providerInfo?.provider;
-    final model = providerInfo?.model;
-    final providerDetail = [name, model].whereType<String>().join(', ');
-    if (providerDetail.isNotEmpty) {
-      warning = '$warning\n$providerDetail';
-    }
-
     final hasFallbackMessage =
         state.message != null && state.message!.trim().isNotEmpty;
     final referencedEvents = response?.referencedEvents ?? const <String>[];
