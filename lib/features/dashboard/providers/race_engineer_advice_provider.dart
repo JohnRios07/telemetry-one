@@ -7,6 +7,7 @@ import '../../../../core/backend/backend_client.dart';
 import '../../../../core/backend/backend_sync_provider.dart';
 import '../../../../core/backend/telemetry_frame_dto.dart';
 import '../../../../core/backend/v2_bridge_providers.dart';
+import 'session_provider.dart';
 
 enum RaceEngineerAdviceStatus {
   idle,
@@ -18,9 +19,19 @@ enum RaceEngineerAdviceStatus {
 }
 
 const Duration raceEngineerAdviceRequestTimeout = Duration(seconds: 25);
+const Duration raceEngineerAdviceAutoPollInterval = Duration(seconds: 12);
+const Duration raceEngineerAdviceAutoPollBackoff = Duration(seconds: 30);
 
 final raceEngineerAdviceRequestTimeoutProvider = Provider<Duration>((ref) {
   return raceEngineerAdviceRequestTimeout;
+});
+
+final raceEngineerAdviceAutoPollIntervalProvider = Provider<Duration>((ref) {
+  return raceEngineerAdviceAutoPollInterval;
+});
+
+final raceEngineerAdviceAutoPollBackoffProvider = Provider<Duration>((ref) {
+  return raceEngineerAdviceAutoPollBackoff;
 });
 
 class RaceEngineerAdviceAvailability {
@@ -85,10 +96,28 @@ class RaceEngineerAdviceState {
 
 const Object _unchanged = Object();
 
+class _RaceEngineerRequestScope {
+  final String sessionId;
+  final String effectiveSessionId;
+
+  const _RaceEngineerRequestScope({
+    required this.sessionId,
+    required this.effectiveSessionId,
+  });
+
+  bool matches(_RaceEngineerRequestScope other) {
+    return sessionId == other.sessionId &&
+        effectiveSessionId == other.effectiveSessionId;
+  }
+}
+
 class RaceEngineerAdviceNotifier
     extends StateNotifier<RaceEngineerAdviceState> {
   final Ref _ref;
   Timer? _cooldownTimer;
+  int? _lastSuccessfulSinceUnixMs;
+  _RaceEngineerRequestScope? _lastRequestScope;
+  _RaceEngineerRequestScope? _activeRequestScope;
 
   RaceEngineerAdviceNotifier(this._ref)
     : super(const RaceEngineerAdviceState.idle());
@@ -96,6 +125,8 @@ class RaceEngineerAdviceNotifier
   Future<void> requestAdvice({
     RaceEngineerAdviceRequest request = const RaceEngineerAdviceRequest(),
   }) async {
+    _syncRequestScope();
+
     if (state.status == RaceEngineerAdviceStatus.loading) return;
     if (state.isCooldownActive()) return;
 
@@ -108,7 +139,16 @@ class RaceEngineerAdviceNotifier
       return;
     }
 
-    final sessionId = _ref.read(backendSyncProvider).effectiveSessionId.trim();
+    final requestScope = _currentRequestScope();
+    _activeRequestScope = requestScope;
+    final sessionId = requestScope.effectiveSessionId;
+    final effectiveRequest = request.sinceUnixMs == null &&
+            _lastSuccessfulSinceUnixMs != null
+        ? RaceEngineerAdviceRequest(
+            sinceUnixMs: _lastSuccessfulSinceUnixMs,
+            maxEvents: request.maxEvents,
+          )
+        : request;
     state = const RaceEngineerAdviceState(
       status: RaceEngineerAdviceStatus.loading,
     );
@@ -117,7 +157,7 @@ class RaceEngineerAdviceNotifier
       final timeout = _ref.read(raceEngineerAdviceRequestTimeoutProvider);
       final response = await _ref
           .read(backendClientProvider)
-          .requestRaceEngineerAdvice(sessionId, request)
+          .requestRaceEngineerAdvice(sessionId, effectiveRequest)
           .timeout(
             timeout,
             onTimeout: () {
@@ -128,7 +168,13 @@ class RaceEngineerAdviceNotifier
             },
           );
 
+      if (!_canApplyResponse(response, requestScope)) {
+        _discardStaleResponse(requestScope);
+        return;
+      }
+
       if (response.hasNoEvents) {
+        _updateLastSuccessfulSinceUnixMs(response);
         _clearCooldownTimer();
         state = RaceEngineerAdviceState(
           status: RaceEngineerAdviceStatus.noEvents,
@@ -150,6 +196,7 @@ class RaceEngineerAdviceNotifier
         return;
       }
 
+      _updateLastSuccessfulSinceUnixMs(response);
       _clearCooldownTimer();
       state = RaceEngineerAdviceState(
         status: RaceEngineerAdviceStatus.success,
@@ -187,6 +234,10 @@ class RaceEngineerAdviceNotifier
         status: RaceEngineerAdviceStatus.error,
         message: 'Unexpected error while requesting Race Engineer advice.',
       );
+    } finally {
+      if (_activeRequestScope != null && _activeRequestScope!.matches(requestScope)) {
+        _activeRequestScope = null;
+      }
     }
   }
 
@@ -221,7 +272,152 @@ class RaceEngineerAdviceNotifier
     _cooldownTimer?.cancel();
     _cooldownTimer = null;
   }
+
+  void _updateLastSuccessfulSinceUnixMs(RaceEngineerAdviceResponse response) {
+    final nextSinceUnixMs =
+        response.window?.untilUnixMs ?? response.generatedAtUnixMs;
+    if (nextSinceUnixMs == null) return;
+    if (_lastSuccessfulSinceUnixMs == null ||
+        nextSinceUnixMs > _lastSuccessfulSinceUnixMs!) {
+      _lastSuccessfulSinceUnixMs = nextSinceUnixMs;
+    }
+  }
+
+  void _syncRequestScope() {
+    final nextScope = _currentRequestScope();
+
+    if (_lastRequestScope == null || !_lastRequestScope!.matches(nextScope)) {
+      _lastSuccessfulSinceUnixMs = null;
+      _lastRequestScope = nextScope;
+    }
+  }
+
+  _RaceEngineerRequestScope _currentRequestScope() {
+    final sessionState = _ref.read(sessionRecorderProvider);
+    return _RaceEngineerRequestScope(
+      sessionId: sessionState.currentSession?.id.trim() ?? '',
+      effectiveSessionId: _ref.read(backendSyncProvider).effectiveSessionId.trim(),
+    );
+  }
+
+  bool _canApplyResponse(
+    RaceEngineerAdviceResponse response,
+    _RaceEngineerRequestScope requestScope,
+  ) {
+    final currentScope = _currentRequestScope();
+    return currentScope.matches(requestScope) &&
+        response.sessionId.trim() == currentScope.effectiveSessionId;
+  }
+
+  void _discardStaleResponse(_RaceEngineerRequestScope requestScope) {
+    if (_activeRequestScope != null && _activeRequestScope!.matches(requestScope)) {
+      _activeRequestScope = null;
+    }
+    if (mounted && state.status == RaceEngineerAdviceStatus.loading) {
+      state = const RaceEngineerAdviceState.idle();
+    }
+  }
 }
+
+class RaceEngineerAdviceAutoPollController {
+  final Ref _ref;
+  Timer? _timer;
+  DateTime? _pausedUntil;
+
+  RaceEngineerAdviceAutoPollController(this._ref) {
+    _ref.listen(sessionRecorderProvider, (_, __) => _syncTimer());
+    _ref.listen(backendSyncProvider, (_, __) => _syncTimer());
+    _ref.listen(backendV2EnabledProvider, (_, __) => _syncTimer());
+    _ref.listen(raceEngineerAdviceProvider, (previous, next) {
+      _handleAdviceState(previous, next);
+    });
+    _syncTimer();
+  }
+
+  void dispose() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  void _syncTimer() {
+    final shouldPoll = _shouldAutoPoll();
+    if (!shouldPoll) {
+      _timer?.cancel();
+      _timer = null;
+      return;
+    }
+
+    _timer ??= Timer.periodic(
+      _ref.read(raceEngineerAdviceAutoPollIntervalProvider),
+      (_) => _tick(),
+    );
+  }
+
+  void _tick() {
+    if (!_shouldAutoPoll()) {
+      _syncTimer();
+      return;
+    }
+
+    final now = DateTime.now();
+    if (_pausedUntil != null && _pausedUntil!.isAfter(now)) return;
+
+    final state = _ref.read(raceEngineerAdviceProvider);
+    if (state.status == RaceEngineerAdviceStatus.loading) return;
+    if (state.isCooldownActive(now)) return;
+
+    unawaited(_ref.read(raceEngineerAdviceProvider.notifier).requestAdvice());
+  }
+
+  void _handleAdviceState(
+    RaceEngineerAdviceState? previous,
+    RaceEngineerAdviceState next,
+  ) {
+    final now = DateTime.now();
+    switch (next.status) {
+      case RaceEngineerAdviceStatus.rateLimited:
+        final cooldownExpiresAt = next.cooldownExpiresAt;
+        if (cooldownExpiresAt != null) {
+          _pausedUntil = cooldownExpiresAt;
+        } else if (previous?.status != RaceEngineerAdviceStatus.rateLimited) {
+          _pausedUntil = now.add(_ref.read(raceEngineerAdviceAutoPollBackoffProvider));
+        }
+        return;
+      case RaceEngineerAdviceStatus.error:
+        _pausedUntil = now.add(_ref.read(raceEngineerAdviceAutoPollBackoffProvider));
+        return;
+      case RaceEngineerAdviceStatus.success:
+      case RaceEngineerAdviceStatus.noEvents:
+        _pausedUntil = null;
+        return;
+      case RaceEngineerAdviceStatus.idle:
+      case RaceEngineerAdviceStatus.loading:
+        return;
+    }
+  }
+
+  bool _shouldAutoPoll() {
+    if (!_ref.read(backendV2EnabledProvider)) return false;
+
+    final sessionState = _ref.read(sessionRecorderProvider);
+    if (!sessionState.isRecording) return false;
+
+    final syncState = _ref.read(backendSyncProvider);
+    if (!syncState.enabled || !syncState.udpConnected) return false;
+
+    final availability = _ref.read(raceEngineerAdviceAvailabilityProvider);
+    if (!availability.canRequest) return false;
+
+    return true;
+  }
+}
+
+final raceEngineerAdviceAutoPollControllerProvider =
+    Provider.autoDispose<Object?>((ref) {
+      final controller = RaceEngineerAdviceAutoPollController(ref);
+      ref.onDispose(controller.dispose);
+      return controller;
+    });
 
 final raceEngineerAdviceProvider =
     StateNotifierProvider<RaceEngineerAdviceNotifier, RaceEngineerAdviceState>((

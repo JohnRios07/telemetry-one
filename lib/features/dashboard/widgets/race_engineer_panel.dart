@@ -13,6 +13,7 @@ class RaceEngineerPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(raceEngineerAdviceAutoPollControllerProvider);
     final state = ref.watch(raceEngineerAdviceProvider);
     final availability = ref.watch(raceEngineerAdviceAvailabilityProvider);
     final loading = state.status == RaceEngineerAdviceStatus.loading;
@@ -178,13 +179,6 @@ class _RateLimitedBody extends StatelessWidget {
     String warning = 'AI provider is rate-limited.';
     if (providerInfo?.retryAfterSeconds case final seconds?) {
       warning = 'AI provider is rate-limited. Try again in ~${seconds}s.';
-    }
-
-    final name = providerInfo?.providerName ?? providerInfo?.provider;
-    final model = providerInfo?.model;
-    final providerDetail = [name, model].whereType<String>().join(', ');
-    if (providerDetail.isNotEmpty) {
-      warning = '$warning\n$providerDetail';
     }
 
     final hasFallbackMessage =
